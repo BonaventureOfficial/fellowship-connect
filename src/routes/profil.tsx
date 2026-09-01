@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import lfLogo from "@/assets/lf-logo.png.asset.json";
 import lfMembers from "@/assets/lf-members.png.asset.json";
+import lfCover from "@/assets/lf-cover.png.asset.json";
 
 export const Route = createFileRoute("/profil")({
   head: () => ({
@@ -52,7 +53,7 @@ function ProfilComponent() {
           Organisation · Fondée en 2024
         </p>
         <p className="lf-billboard-word mt-2 text-sm font-semibold uppercase tracking-[0.2em]">
-          Personalié · Potentialité · Prosperité
+          Personalite · Potentialite · Prosperite
         </p>
       </div>
 
@@ -64,6 +65,15 @@ function ProfilComponent() {
           personnalité, la potentialité et la prosperité. Nous accompagnons
           chaque membre dans son épanouissement personnel et collectif.
         </p>
+      </section>
+
+      {/* Image de couverture */}
+      <section className="mt-4 overflow-hidden rounded-2xl border border-border">
+        <img
+          src={lfCover.url}
+          alt="Living Fellowship"
+          className="w-full object-cover"
+        />
       </section>
 
       {/* Statistiques */}
@@ -91,11 +101,11 @@ function ProfilComponent() {
         <dl className="mt-2 space-y-2 text-sm">
           <div className="flex justify-between">
             <dt className="text-muted-foreground">Siège</dt>
-            <dd className="text-foreground">Kigali, Rwanda</dd>
+            <dd className="text-foreground">Burundi-Bujumbura</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-muted-foreground">Email</dt>
-            <dd className="text-foreground">contact@livingfellowship.org</dd>
+            <dd className="text-foreground">livingfellowship2024@gmail.com</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-muted-foreground">Statut</dt>
