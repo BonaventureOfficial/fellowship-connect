@@ -58,9 +58,6 @@ function HomeComponent() {
             <p className="text-sm font-bold tracking-wide text-foreground">
               Living Fellowship
             </p>
-            <p className="text-[0.7rem] text-muted-foreground">
-              Gestion des membres
-            </p>
           </div>
         </div>
         <span className="rounded-full border border-border bg-secondary/60 px-3 py-1 text-[0.7rem] font-medium text-muted-foreground">

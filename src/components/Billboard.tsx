@@ -1,4 +1,4 @@
-const WORDS = ["Personalié", "Potentialité", "Prosperité"];
+const WORDS = ["Personalite", "Potentialite", "Prosperite"];
 
 /**
  * Panneau publicitaire : les trois mots défilent en boucle (marquee)
