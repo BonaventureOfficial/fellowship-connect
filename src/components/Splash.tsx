@@ -13,6 +13,11 @@ export function Splash({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<"logo" | "members">("logo");
 
   useEffect(() => {
+    // Précharge les deux images pour qu'elles soient prêtes dès chaque phase.
+    const i1 = new Image();
+    i1.src = lfLogo.url;
+    const i2 = new Image();
+    i2.src = lfMembers.url;
     const t1 = setTimeout(() => setPhase("members"), 3000);
     const t2 = setTimeout(() => onDone(), TOTAL_MS);
     return () => {
