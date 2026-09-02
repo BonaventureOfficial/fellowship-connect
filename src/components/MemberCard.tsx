@@ -1,50 +1,61 @@
-import type { Member } from "@/lib/members";
+import { useState } from "react";
+import { AvatarViewer } from "@/components/AvatarViewer";
+import { fullName, initialsOf, type Member } from "@/lib/members";
 
 export function MemberCard({ member }: { member: Member }) {
+  const [open, setOpen] = useState(false);
   const verified = member.status === "Vérifié";
-  const initials = member.name
-    .split(" ")
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("");
+  const name = fullName(member) || "Membre";
 
   return (
-    <article className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 transition-colors hover:border-primary/40">
-      {/* Avatar avec initiales */}
-      <div className="lf-ring-gradient shrink-0 rounded-full p-[2px]">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-card text-sm font-bold text-foreground">
-          {initials}
+    <article className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
+      {/* Avatar cliquable */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`Voir la photo de ${name}`}
+        className="lf-ring-gradient shrink-0 rounded-full p-[2.5px] transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-card text-lg font-bold text-foreground">
+          {member.avatar_url ? (
+            <img
+              src={member.avatar_url}
+              alt={name}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            initialsOf(name)
+          )}
         </div>
-      </div>
+      </button>
 
       {/* Infos */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {member.name}
-          </p>
-        </div>
-        <p className="truncate text-xs text-muted-foreground">{member.role}</p>
-        <p className="mt-1 font-mono text-[0.7rem] tracking-wide text-muted-foreground">
-          {member.serial}
+        <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+        <p className="mt-1 font-mono text-[0.72rem] tracking-wide text-muted-foreground">
+          {member.serial ?? "LF-…"}
         </p>
+        <span
+          className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
+            verified ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              verified ? "bg-accent" : "bg-muted-foreground"
+            }`}
+          />
+          {member.status}
+        </span>
       </div>
 
-      {/* Statut */}
-      <span
-        className={`flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold ${
-          verified
-            ? "bg-accent/20 text-accent"
-            : "bg-muted text-muted-foreground"
-        }`}
-      >
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${
-            verified ? "bg-accent" : "bg-muted-foreground"
-          }`}
-        />
-        {member.status}
-      </span>
+      <AvatarViewer
+        open={open}
+        onOpenChange={setOpen}
+        src={member.avatar_url}
+        name={name}
+        serial={member.serial}
+      />
     </article>
   );
 }
