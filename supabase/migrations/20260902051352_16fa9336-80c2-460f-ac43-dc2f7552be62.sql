@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.lf_members_before_write() FROM PUBLIC, anon, authenticated;
