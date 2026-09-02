@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnnoncesRouteImport } from './routes/annonces'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ProfilRouteImport } from './routes/profil'
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const AnnoncesRoute = AnnoncesRouteImport.update({
   path: '/annonces',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfilRoute = ProfilRouteImport.update({
   id: '/profil',
   path: '/profil',
@@ -32,30 +38,34 @@ const ProfilRoute = ProfilRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/annonces': typeof AnnoncesRoute
+  '/auth': typeof AuthRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/annonces': typeof AnnoncesRoute
+  '/auth': typeof AuthRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/annonces': typeof AnnoncesRoute
+  '/auth': typeof AuthRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/annonces' | '/profil'
+  fullPaths: '/' | '/annonces' | '/auth' | '/profil'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/annonces' | '/profil'
-  id: '__root__' | '/' | '/annonces' | '/profil'
+  to: '/' | '/annonces' | '/auth' | '/profil'
+  id: '__root__' | '/' | '/annonces' | '/auth' | '/profil'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnnoncesRoute: typeof AnnoncesRoute
+  AuthRoute: typeof AuthRoute
   ProfilRoute: typeof ProfilRoute
 }
 
@@ -75,6 +85,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AnnoncesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profil': {
       id: '/profil'
       path: '/profil'
@@ -88,6 +105,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnnoncesRoute: AnnoncesRoute,
+  AuthRoute: AuthRoute,
   ProfilRoute: ProfilRoute,
 }
 export const routeTree = rootRouteImport
