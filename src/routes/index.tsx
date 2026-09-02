@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Splash } from "@/components/Splash";
 import { Billboard } from "@/components/Billboard";
 import { MemberCard } from "@/components/MemberCard";
-import { members } from "@/lib/members";
+import { supabase } from "@/integrations/supabase/client";
+import type { Member } from "@/lib/members";
 import lfLogo from "@/assets/lf-logo.png.asset.json";
 
 export const Route = createFileRoute("/")({
@@ -13,18 +15,30 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Accueil Living Fellowship : notre devise Personalié, Potentialité, Prosperité et l'annuaire des membres.",
+          "Accueil Living Fellowship : notre devise Personalite, Potentialite, Prosperite et l'annuaire des membres.",
       },
       { property: "og:title", content: "Living Fellowship — Accueil" },
       {
         property: "og:description",
         content:
-          "Personalié, Potentialité, Prosperité — l'annuaire des membres de Living Fellowship.",
+          "Personalite, Potentialite, Prosperite — l'annuaire des membres de Living Fellowship.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: HomeComponent,
 });
+
+async function fetchMembers(): Promise<Member[]> {
+  const { data, error } = await supabase
+    .from("members")
+    .select("id,user_id,first_name,last_name,avatar_url,serial,status,created_at")
+    .not("serial", "is", null)
+    .order("serial", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Member[];
+}
 
 function HomeComponent() {
   const [showSplash, setShowSplash] = useState(false);
@@ -34,6 +48,11 @@ function HomeComponent() {
     const seen = window.sessionStorage.getItem("lf-splash-seen");
     if (!seen) setShowSplash(true);
   }, []);
+
+  const { data: members = [], isLoading } = useQuery({
+    queryKey: ["members"],
+    queryFn: fetchMembers,
+  });
 
   const handleDone = () => {
     if (typeof window !== "undefined") {
@@ -61,7 +80,7 @@ function HomeComponent() {
           </div>
         </div>
         <span className="rounded-full border border-border bg-secondary/60 px-3 py-1 text-[0.7rem] font-medium text-muted-foreground">
-          {members.length} membres
+          {members.length} membre{members.length > 1 ? "s" : ""}
         </span>
       </header>
 
@@ -78,13 +97,39 @@ function HomeComponent() {
             Serial · Statut
           </span>
         </div>
-        <ul className="space-y-3">
-          {members.map((m, i) => (
-            <li key={m.serial} className="lf-card-enter" style={{ animationDelay: `${i * 90}ms` }}>
-              <MemberCard member={m} />
-            </li>
-          ))}
-        </ul>
+
+        {isLoading ? (
+          <ul className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <li
+                key={i}
+                className="h-28 animate-pulse rounded-2xl border border-border bg-card"
+              />
+            ))}
+          </ul>
+        ) : members.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
+            <p className="text-sm font-medium text-foreground">
+              Aucun membre enregistré pour le moment
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Rendez-vous dans l'onglet Profil pour confirmer votre nom et
+              prénom et recevoir votre Serial Number.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {members.map((m: Member, i: number) => (
+              <li
+                key={m.id}
+                className="lf-card-enter"
+                style={{ animationDelay: `${i * 90}ms` }}
+              >
+                <MemberCard member={m} />
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <p className="mt-8 text-center text-[0.7rem] text-muted-foreground">
