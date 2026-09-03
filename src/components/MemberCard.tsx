@@ -1,11 +1,22 @@
 import { useState } from "react";
 import { AvatarViewer } from "@/components/AvatarViewer";
+import { PlatinumBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
+import type { AppRole } from "@/lib/roles";
 
-export function MemberCard({ member }: { member: Member }) {
+export function MemberCard({
+  member,
+  roles = [],
+}: {
+  member: Member;
+  roles?: AppRole[];
+}) {
   const [open, setOpen] = useState(false);
+  const isCeo = roles.includes("ceo");
+  const isAdmin = roles.includes("admin");
   const verified = member.status === "Vérifié";
   const name = fullName(member) || "Membre";
+
 
   return (
     <article className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
