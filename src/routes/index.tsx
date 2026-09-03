@@ -6,6 +6,7 @@ import { Billboard } from "@/components/Billboard";
 import { MemberCard } from "@/components/MemberCard";
 import { supabase } from "@/integrations/supabase/client";
 import type { Member } from "@/lib/members";
+import { useRolesMap } from "@/lib/roles";
 import lfLogo from "@/assets/lf-logo.png.asset.json";
 
 export const Route = createFileRoute("/")({
@@ -48,6 +49,8 @@ function HomeComponent() {
     const seen = window.sessionStorage.getItem("lf-splash-seen");
     if (!seen) setShowSplash(true);
   }, []);
+
+  const { rolesMap } = useRolesMap();
 
   const { data: members = [], isLoading } = useQuery({
     queryKey: ["members"],
@@ -125,7 +128,7 @@ function HomeComponent() {
                 className="lf-card-enter"
                 style={{ animationDelay: `${i * 90}ms` }}
               >
-                <MemberCard member={m} />
+                <MemberCard member={m} roles={rolesMap.get(m.user_id) ?? []} />
               </li>
             ))}
           </ul>

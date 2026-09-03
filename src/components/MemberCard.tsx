@@ -1,11 +1,22 @@
 import { useState } from "react";
 import { AvatarViewer } from "@/components/AvatarViewer";
+import { PlatinumBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
+import type { AppRole } from "@/lib/roles";
 
-export function MemberCard({ member }: { member: Member }) {
+export function MemberCard({
+  member,
+  roles = [],
+}: {
+  member: Member;
+  roles?: AppRole[];
+}) {
   const [open, setOpen] = useState(false);
+  const isCeo = roles.includes("ceo");
+  const isAdmin = roles.includes("admin");
   const verified = member.status === "Vérifié";
   const name = fullName(member) || "Membre";
+
 
   return (
     <article className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
@@ -31,23 +42,34 @@ export function MemberCard({ member }: { member: Member }) {
 
       {/* Infos */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+          {isCeo && <PlatinumBadge />}
+        </div>
         <p className="mt-1 font-mono text-[0.72rem] tracking-wide text-muted-foreground">
           {member.serial ?? "LF-…"}
         </p>
-        <span
-          className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
-            verified ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
-          }`}
-        >
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              verified ? "bg-accent" : "bg-muted-foreground"
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
+              verified ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
             }`}
-          />
-          {member.status}
-        </span>
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                verified ? "bg-accent" : "bg-muted-foreground"
+              }`}
+            />
+            {member.status}
+          </span>
+          {(isCeo || isAdmin) && (
+            <span className="rounded-full bg-primary/15 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wide text-primary">
+              {isCeo ? "CEO" : "Admin"}
+            </span>
+          )}
+        </div>
       </div>
+
 
       <AvatarViewer
         open={open}
