@@ -42,23 +42,34 @@ export function MemberCard({
 
       {/* Infos */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+          {isCeo && <PlatinumBadge />}
+        </div>
         <p className="mt-1 font-mono text-[0.72rem] tracking-wide text-muted-foreground">
           {member.serial ?? "LF-…"}
         </p>
-        <span
-          className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
-            verified ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
-          }`}
-        >
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              verified ? "bg-accent" : "bg-muted-foreground"
+            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
+              verified ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
             }`}
-          />
-          {member.status}
-        </span>
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                verified ? "bg-accent" : "bg-muted-foreground"
+              }`}
+            />
+            {member.status}
+          </span>
+          {(isCeo || isAdmin) && (
+            <span className="rounded-full bg-primary/15 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wide text-primary">
+              {isCeo ? "CEO" : "Admin"}
+            </span>
+          )}
+        </div>
       </div>
+
 
       <AvatarViewer
         open={open}
