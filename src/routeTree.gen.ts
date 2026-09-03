@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnnoncesRouteImport } from './routes/annonces'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as CeoRouteImport } from './routes/ceo'
 import { Route as ProfilRouteImport } from './routes/profil'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CeoRoute = CeoRouteImport.update({
+  id: '/ceo',
+  path: '/ceo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfilRoute = ProfilRouteImport.update({
   id: '/profil',
   path: '/profil',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
+  '/ceo': typeof CeoRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
+  '/ceo': typeof CeoRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
+  '/ceo': typeof CeoRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/annonces' | '/auth' | '/profil'
+  fullPaths: '/' | '/annonces' | '/auth' | '/ceo' | '/profil'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/annonces' | '/auth' | '/profil'
-  id: '__root__' | '/' | '/annonces' | '/auth' | '/profil'
+  to: '/' | '/annonces' | '/auth' | '/ceo' | '/profil'
+  id: '__root__' | '/' | '/annonces' | '/auth' | '/ceo' | '/profil'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnnoncesRoute: typeof AnnoncesRoute
   AuthRoute: typeof AuthRoute
+  CeoRoute: typeof CeoRoute
   ProfilRoute: typeof ProfilRoute
 }
 
@@ -92,6 +102,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ceo': {
+      id: '/ceo'
+      path: '/ceo'
+      fullPath: '/ceo'
+      preLoaderRoute: typeof CeoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profil': {
       id: '/profil'
       path: '/profil'
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnnoncesRoute: AnnoncesRoute,
   AuthRoute: AuthRoute,
+  CeoRoute: CeoRoute,
   ProfilRoute: ProfilRoute,
 }
 export const routeTree = rootRouteImport
