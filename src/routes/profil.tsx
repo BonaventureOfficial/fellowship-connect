@@ -40,6 +40,7 @@ const SIGNED_URL_TTL = 60 * 60 * 24 * 365 * 5;
 
 function ProfilComponent() {
   const { user, loading } = useAuth();
+  const { isCeo } = useMyRoles(user?.id);
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -49,6 +50,7 @@ function ProfilComponent() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [viewer, setViewer] = useState(false);
+
 
   const { data: member } = useQuery({
     queryKey: ["my-member", user?.id],
