@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AnnoncesRouteImport } from './routes/annonces'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CeoRouteImport } from './routes/ceo'
+import { Route as ParametresRouteImport } from './routes/parametres'
 import { Route as ProfilRouteImport } from './routes/profil'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const CeoRoute = CeoRouteImport.update({
   path: '/ceo',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ParametresRoute = ParametresRouteImport.update({
+  id: '/parametres',
+  path: '/parametres',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfilRoute = ProfilRouteImport.update({
   id: '/profil',
   path: '/profil',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
   '/ceo': typeof CeoRoute
+  '/parametres': typeof ParametresRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
   '/ceo': typeof CeoRoute
+  '/parametres': typeof ParametresRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRoutesById {
@@ -61,14 +69,22 @@ export interface FileRoutesById {
   '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
   '/ceo': typeof CeoRoute
+  '/parametres': typeof ParametresRoute
   '/profil': typeof ProfilRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/annonces' | '/auth' | '/ceo' | '/profil'
+  fullPaths: '/' | '/annonces' | '/auth' | '/ceo' | '/parametres' | '/profil'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/annonces' | '/auth' | '/ceo' | '/profil'
-  id: '__root__' | '/' | '/annonces' | '/auth' | '/ceo' | '/profil'
+  to: '/' | '/annonces' | '/auth' | '/ceo' | '/parametres' | '/profil'
+  id:
+    | '__root__'
+    | '/'
+    | '/annonces'
+    | '/auth'
+    | '/ceo'
+    | '/parametres'
+    | '/profil'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,6 +92,7 @@ export interface RootRouteChildren {
   AnnoncesRoute: typeof AnnoncesRoute
   AuthRoute: typeof AuthRoute
   CeoRoute: typeof CeoRoute
+  ParametresRoute: typeof ParametresRoute
   ProfilRoute: typeof ProfilRoute
 }
 
@@ -109,6 +126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CeoRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/parametres': {
+      id: '/parametres'
+      path: '/parametres'
+      fullPath: '/parametres'
+      preLoaderRoute: typeof ParametresRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profil': {
       id: '/profil'
       path: '/profil'
@@ -124,6 +148,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnnoncesRoute: AnnoncesRoute,
   AuthRoute: AuthRoute,
   CeoRoute: CeoRoute,
+  ParametresRoute: ParametresRoute,
   ProfilRoute: ProfilRoute,
 }
 export const routeTree = rootRouteImport
