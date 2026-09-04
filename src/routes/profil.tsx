@@ -237,14 +237,22 @@ function ProfilComponent() {
                 Changer la photo
               </Button>
 
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <span className="rounded-full bg-muted px-3 py-1 font-mono text-xs text-muted-foreground">
                   {member?.serial ?? "Serial en attente"}
                 </span>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
                   {member?.status ?? "Non Vérifié"}
+                  {isCeo && <PlatinumBadge />}
                 </span>
               </div>
+
+              {isCeo && (
+                <Button asChild className="mt-5 w-full">
+                  <Link to="/ceo">CEO — Gérer les admins</Link>
+                </Button>
+              )}
+
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
