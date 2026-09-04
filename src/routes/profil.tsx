@@ -248,8 +248,12 @@ function ProfilComponent() {
               </div>
 
               {isCeo && (
-                <Button asChild className="mt-5 w-full">
-                  <Link to="/ceo">CEO — Gérer les admins</Link>
+                <Button
+                  type="button"
+                  className="mt-5 w-full"
+                  onClick={() => void navigate({ to: "/ceo" })}
+                >
+                  CEO — Gérer les admins
                 </Button>
               )}
 
