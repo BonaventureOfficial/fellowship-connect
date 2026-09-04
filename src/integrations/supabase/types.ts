@@ -71,6 +71,48 @@ export type Database = {
         }
         Relationships: []
       }
+      verification_requests: {
+        Row: {
+          birth_date: string
+          birth_place: string
+          created_at: string
+          first_name: string
+          id: string
+          last_name: string
+          lf_function: string
+          serial: string
+          state: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          birth_date: string
+          birth_place: string
+          created_at?: string
+          first_name: string
+          id?: string
+          last_name: string
+          lf_function: string
+          serial: string
+          state?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          birth_date?: string
+          birth_place?: string
+          created_at?: string
+          first_name?: string
+          id?: string
+          last_name?: string
+          lf_function?: string
+          serial?: string
+          state?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
