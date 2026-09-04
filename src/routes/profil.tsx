@@ -3,10 +3,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useMyRoles } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AvatarViewer } from "@/components/AvatarViewer";
+import { PlatinumBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
 import lfLogo from "@/assets/lf-logo.png.asset.json";
 import lfMembers from "@/assets/lf-members.png.asset.json";
@@ -38,6 +40,7 @@ const SIGNED_URL_TTL = 60 * 60 * 24 * 365 * 5;
 
 function ProfilComponent() {
   const { user, loading } = useAuth();
+  const { isCeo } = useMyRoles(user?.id);
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -47,6 +50,7 @@ function ProfilComponent() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [viewer, setViewer] = useState(false);
+
 
   const { data: member } = useQuery({
     queryKey: ["my-member", user?.id],
@@ -233,14 +237,22 @@ function ProfilComponent() {
                 Changer la photo
               </Button>
 
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
                 <span className="rounded-full bg-muted px-3 py-1 font-mono text-xs text-muted-foreground">
                   {member?.serial ?? "Serial en attente"}
                 </span>
-                <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
                   {member?.status ?? "Non Vérifié"}
+                  {isCeo && <PlatinumBadge />}
                 </span>
               </div>
+
+              {isCeo && (
+                <Button asChild className="mt-5 w-full">
+                  <Link to="/ceo">CEO — Gérer les admins</Link>
+                </Button>
+              )}
+
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">

@@ -102,7 +102,7 @@ function CeoComponent() {
             Console privée de direction
           </p>
         </div>
-        <PlatinumBadge label="CEO" />
+        <PlatinumBadge />
       </div>
 
       {/* 1. Admins */}
