@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -42,6 +42,7 @@ function ProfilComponent() {
   const { user, loading } = useAuth();
   const { isCeo } = useMyRoles(user?.id);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [firstName, setFirstName] = useState("");
@@ -248,8 +249,12 @@ function ProfilComponent() {
               </div>
 
               {isCeo && (
-                <Button asChild className="mt-5 w-full">
-                  <Link to="/ceo">CEO — Gérer les admins</Link>
+                <Button
+                  type="button"
+                  className="mt-5 w-full"
+                  onClick={() => void navigate({ to: "/ceo" })}
+                >
+                  CEO — Gérer les admins
                 </Button>
               )}
 
