@@ -194,6 +194,10 @@ function ProfilComponent() {
             <Button asChild className="mt-4 w-full">
               <Link to="/auth">Se connecter / Créer un compte</Link>
             </Button>
+            <Button asChild variant="outline" className="mt-3 w-full">
+              <Link to="/parametres">Paramètres</Link>
+            </Button>
+
           </div>
         ) : (
           <div className="mt-4">
