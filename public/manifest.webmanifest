@@ -1,0 +1,20 @@
+{
+  "name": "Living Fellowship",
+  "short_name": "LF",
+  "description": "Plateforme de gestion des membres de Living Fellowship : Personalite, Potentialite, Prosperite.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B0616",
+  "theme_color": "#0B0616",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["social", "productivity", "lifestyle"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
