@@ -248,15 +248,26 @@ function ProfilComponent() {
                 </span>
               </div>
 
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-5 w-full"
+                onClick={() => void navigate({ to: "/parametres" })}
+              >
+                Paramètres
+              </Button>
+
               {isCeo && (
                 <Button
                   type="button"
-                  className="mt-5 w-full"
+                  className="mt-3 w-full"
                   onClick={() => void navigate({ to: "/ceo" })}
                 >
                   CEO — Gérer les admins
                 </Button>
               )}
+
+
 
             </div>
 
