@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import lfLogo from "@/assets/lf-logo.png.asset.json";
-import lfMembers from "@/assets/lf-members.png.asset.json";
+import { lfLogo } from "@/lib/assets";
+import { lfMembers } from "@/lib/assets";
 
 const TOTAL_MS = 8000; // 3s logo + 5s members
 

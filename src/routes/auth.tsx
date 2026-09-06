@@ -5,7 +5,7 @@ import { lovable } from "@/integrations/lovable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import lfLogo from "@/assets/lf-logo.png.asset.json";
+import { lfLogo } from "@/lib/assets";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({

@@ -7,7 +7,7 @@ import { MemberCard } from "@/components/MemberCard";
 import { supabase } from "@/integrations/supabase/client";
 import type { Member } from "@/lib/members";
 import { useRolesMap } from "@/lib/roles";
-import lfLogo from "@/assets/lf-logo.png.asset.json";
+import { lfLogo } from "@/lib/assets";
 
 export const Route = createFileRoute("/")({
   head: () => ({
