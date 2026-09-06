@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import DOMPurify from "dompurify";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface Announcement {
@@ -66,9 +67,6 @@ export function useUnreadAnnouncements() {
 /** Nettoyage du HTML riche (exécuté côté navigateur uniquement). */
 export function sanitize(html: string): string {
   if (typeof window === "undefined") return html.replace(/<[^>]*>/g, " ");
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const DOMPurify = (window as unknown as { __lfPurify?: any }).__lfPurify;
-  if (!DOMPurify) return html.replace(/<[^>]*>/g, " ");
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: ["b", "strong", "i", "em", "u", "br", "div", "p", "span", "ul", "ol", "li", "h2", "h3", "a"],
     ALLOWED_ATTR: ["style", "href", "target", "rel"],
