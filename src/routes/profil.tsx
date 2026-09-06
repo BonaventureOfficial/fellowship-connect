@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label";
 import { AvatarViewer } from "@/components/AvatarViewer";
 import { PlatinumBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
-import lfLogo from "@/assets/lf-logo.png.asset.json";
-import lfMembers from "@/assets/lf-members.png.asset.json";
-import lfCover from "@/assets/lf-cover.png.asset.json";
+import { lfLogo } from "@/lib/assets";
+import { lfMembers } from "@/lib/assets";
+import { lfCover } from "@/lib/assets";
 
 export const Route = createFileRoute("/profil")({
   head: () => ({

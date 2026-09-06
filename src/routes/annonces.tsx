@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import lfLogo from "@/assets/lf-logo.png.asset.json";
+import { lfLogo } from "@/lib/assets";
 
 export const Route = createFileRoute("/annonces")({
   head: () => ({
