@@ -209,9 +209,9 @@ function ProfilComponent() {
                 className="lf-ring-gradient rounded-full p-[3px] transition-transform hover:scale-[1.03]"
               >
                 <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full bg-background text-3xl font-extrabold text-foreground">
-                  {member?.avatar_url ? (
+                  {avatarSrc ? (
                     <img
-                      src={member.avatar_url}
+                      src={avatarSrc}
                       alt={displayName || "Ma photo"}
                       className="h-full w-full object-cover"
                     />
@@ -325,7 +325,7 @@ function ProfilComponent() {
             <AvatarViewer
               open={viewer}
               onOpenChange={setViewer}
-              src={member?.avatar_url ?? null}
+              src={avatarSrc}
               name={displayName || "Mon profil"}
               serial={member?.serial ?? null}
             />

@@ -12,6 +12,7 @@ export function MemberCard({
   roles?: AppRole[];
 }) {
   const [open, setOpen] = useState(false);
+  const avatar = useAvatarUrl(member.avatar_url);
   const isCeo = roles.includes("ceo");
   const isAdmin = roles.includes("admin");
   const verified = member.status === "Vérifié";
