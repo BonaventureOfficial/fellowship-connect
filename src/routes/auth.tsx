@@ -34,6 +34,7 @@ function AuthComponent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -113,15 +114,26 @@ function AuthComponent() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="password">Mot de passe</Label>
-          <Input
-            id="password"
-            type="password"
-            required
-            minLength={6}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPw ? "text" : "password"}
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="pr-20"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw((v) => !v)}
+              className="absolute inset-y-0 right-2 my-auto h-7 rounded-md px-2 text-xs font-medium text-primary hover:bg-secondary"
+              aria-label={showPw ? "Cacher le mot de passe" : "Afficher le mot de passe"}
+            >
+              {showPw ? "Cacher" : "Afficher"}
+            </button>
+          </div>
         </div>
 
         {err && <p className="text-xs text-destructive">{err}</p>}
