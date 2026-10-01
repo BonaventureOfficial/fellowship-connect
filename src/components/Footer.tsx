@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useUnreadAnnouncements } from "@/lib/announcements";
 
 const tabs = [
   {
@@ -52,6 +53,7 @@ const tabs = [
 ];
 
 export function Footer() {
+  const unread = useUnreadAnnouncements();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/80 backdrop-blur-xl">
       <ul className="mx-auto flex max-w-md items-stretch justify-around px-2">
@@ -65,13 +67,18 @@ export function Footer() {
               {({ isActive }) => (
                 <>
                   <span
-                    className={`flex h-9 w-12 items-center justify-center rounded-xl transition-all ${
+                    className={`relative flex h-9 w-12 items-center justify-center rounded-xl transition-all ${
                       isActive
                         ? "bg-primary/15 text-primary"
                         : "text-muted-foreground group-hover:text-foreground"
                     }`}
                   >
                     {tab.icon(isActive)}
+                    {tab.to === "/annonces" && unread > 0 && !isActive && (
+                      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[0.6rem] font-bold text-destructive-foreground">
+                        {unread > 9 ? "9+" : unread}
+                      </span>
+                    )}
                   </span>
                   <span className={isActive ? "text-primary" : ""}>
                     {tab.label}
