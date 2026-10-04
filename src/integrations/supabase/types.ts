@@ -164,6 +164,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      review_verification: {
+        Args: { _approve: boolean; _request_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "ceo" | "admin" | "member"
