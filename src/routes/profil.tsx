@@ -13,6 +13,7 @@ import { fullName, initialsOf, type Member } from "@/lib/members";
 import { lfLogo } from "@/lib/assets";
 import { lfMembers } from "@/lib/assets";
 import { lfCover } from "@/lib/assets";
+import { useAvatarUrl } from "@/lib/useAvatarUrl";
 
 export const Route = createFileRoute("/profil")({
   head: () => ({
@@ -68,6 +69,7 @@ function ProfilComponent() {
       return (data as Member | null) ?? null;
     },
   });
+  const avatarSrc = useAvatarUrl(member?.avatar_url);
 
   useEffect(() => {
     if (member) {
