@@ -53,6 +53,33 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          details: Json
+          id: string
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       members: {
         Row: {
           avatar_url: string | null
@@ -112,6 +139,7 @@ export type Database = {
       }
       verification_requests: {
         Row: {
+          approvals_count: number
           birth_date: string
           birth_place: string
           created_at: string
@@ -119,12 +147,14 @@ export type Database = {
           id: string
           last_name: string
           lf_function: string
+          refusals_count: number
           serial: string
           state: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          approvals_count?: number
           birth_date: string
           birth_place: string
           created_at?: string
@@ -132,12 +162,14 @@ export type Database = {
           id?: string
           last_name: string
           lf_function: string
+          refusals_count?: number
           serial: string
           state?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          approvals_count?: number
           birth_date?: string
           birth_place?: string
           created_at?: string
@@ -145,12 +177,45 @@ export type Database = {
           id?: string
           last_name?: string
           lf_function?: string
+          refusals_count?: number
           serial?: string
           state?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      verification_votes: {
+        Row: {
+          admin_id: string
+          approve: boolean
+          created_at: string
+          id: string
+          request_id: string
+        }
+        Insert: {
+          admin_id: string
+          approve: boolean
+          created_at?: string
+          id?: string
+          request_id: string
+        }
+        Update: {
+          admin_id?: string
+          approve?: boolean
+          created_at?: string
+          id?: string
+          request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_votes_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "verification_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
