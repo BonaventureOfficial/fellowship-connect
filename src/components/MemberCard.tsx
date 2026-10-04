@@ -1,3 +1,4 @@
+import { useAvatarUrl } from "@/lib/useAvatarUrl";
 import { useState } from "react";
 import { AvatarViewer } from "@/components/AvatarViewer";
 import { PlatinumBadge } from "@/components/PlatinumBadge";

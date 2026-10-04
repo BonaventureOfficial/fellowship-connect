@@ -6,7 +6,7 @@ const cache = new Map<string, string>();
 /** Extract the storage path inside the "avatars" bucket from a stored URL or path. */
 function avatarPath(stored: string): string | null {
   const m = stored.match(/\/avatars\/([^?]+)/);
-  if (m) return decodeURIComponent(m[1]);
+  if (m) return decodeURIComponent(m[1] ?? "");
   if (!stored.startsWith("http")) return stored;
   return null;
 }
