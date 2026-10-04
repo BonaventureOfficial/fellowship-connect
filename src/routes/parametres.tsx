@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Member } from "@/lib/members";
+import { useMutation } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useMyRoles } from "@/lib/roles";
+import { addAdmin, listAdmins, removeAdmin } from "@/lib/ceo.functions";
 
 export const Route = createFileRoute("/parametres")({
   head: () => ({
@@ -41,13 +45,14 @@ const FONCTIONS = [
   "Membre",
 ];
 
-type Panel = "verify" | "email" | "password" | "delete" | null;
+type Panel = "admins" | "review" | "verify" | "email" | "password" | "delete" | null;
 
 function ParametresComponent() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [panel, setPanel] = useState<Panel>(null);
+  const { isCeo, isAdmin } = useMyRoles(user?.id);
 
   const { data: member } = useQuery({
     queryKey: ["my-member", user?.id],
@@ -85,6 +90,26 @@ function ParametresComponent() {
         </section>
       ) : (
         <div className="mt-5 space-y-3">
+          {isCeo && (
+            <SettingItem
+              title="Add Admin"
+              subtitle="Nommer ou révoquer des administrateurs"
+              open={panel === "admins"}
+              onToggle={() => setPanel(panel === "admins" ? null : "admins")}
+            >
+              <AdminManager />
+            </SettingItem>
+          )}
+          {isAdmin && (
+            <SettingItem
+              title="Valider les comptes"
+              subtitle="Demandes de vérification des membres"
+              open={panel === "review"}
+              onToggle={() => setPanel(panel === "review" ? null : "review")}
+            >
+              <ReviewRequests />
+            </SettingItem>
+          )}
           <SettingItem
             title="Vérifier Votre Compte"
             subtitle="Envoyer une demande de vérification"
@@ -225,18 +250,24 @@ function VerifyForm({
         !firstName.trim() ||
         !lastName.trim() ||
         !birthPlace.trim() ||
-        !birthDate ||
+        !birthDate.trim() ||
         !fonction.trim() ||
         !serial.trim()
       ) {
         throw new Error("Veuillez remplir tous les champs du formulaire.");
       }
+      const m = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(birthDate.trim());
+      const d = m ? new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`) : null;
+      if (!m || !d || isNaN(d.getTime()) || d.getUTCDate() !== Number(m[3]) || d > new Date()) {
+        throw new Error("Date de naissance invalide. Format : Année/Mois/Jour (ex : 1998/05/21).");
+      }
+      const isoDate = `${m[1]}-${m[2]}-${m[3]}`;
       const { error } = await supabase.from("verification_requests").insert({
         user_id: userId,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         birth_place: birthPlace.trim(),
-        birth_date: birthDate,
+        birth_date: isoDate,
         lf_function: fonction.trim(),
         serial: serial.trim(),
       });
@@ -288,9 +319,15 @@ function VerifyForm({
           <Label htmlFor="v-date">Date de naissance</Label>
           <Input
             id="v-date"
-            type="date"
+            inputMode="numeric"
+            placeholder="Année/Mois/Jour (ex : 1998/05/21)"
+            maxLength={10}
             value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+              const parts = [digits.slice(0, 4), digits.slice(4, 6), digits.slice(6, 8)].filter(Boolean);
+              setBirthDate(parts.join("/"));
+            }}
           />
         </div>
       </div>
@@ -498,6 +535,115 @@ function DeleteForm({ onDeleted }: { onDeleted: () => Promise<void> }) {
       >
         Supprimer définitivement mon compte
       </Button>
+    </div>
+  );
+}
+
+
+function AdminManager() {
+  const fetchAdmins = useServerFn(listAdmins);
+  const doAdd = useServerFn(addAdmin);
+  const doRemove = useServerFn(removeAdmin);
+  const [email, setEmail] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const admins = useQuery({ queryKey: ["admins"], queryFn: () => fetchAdmins() });
+  const addMut = useMutation({
+    mutationFn: (v: string) => doAdd({ data: { email: v } }),
+    onSuccess: (r) => {
+      setMsg(`${r.email} est maintenant administrateur.`);
+      setErr(null);
+      setEmail("");
+      void admins.refetch();
+    },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec de l'ajout."),
+  });
+  const removeMut = useMutation({
+    mutationFn: (userId: string) => doRemove({ data: { userId } }),
+    onSuccess: () => {
+      setMsg("Administrateur révoqué.");
+      void admins.refetch();
+    },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec."),
+  });
+  return (
+    <div className="grid gap-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="a-email">Email du membre</Label>
+        <Input id="a-email" type="email" value={email} placeholder="membre@email.com" onChange={(e) => setEmail(e.target.value)} />
+      </div>
+      <Feedback err={err} msg={msg} />
+      <Button disabled={!email.includes("@") || addMut.isPending} onClick={() => { setErr(null); setMsg(null); addMut.mutate(email.trim()); }}>
+        {addMut.isPending ? "Ajout…" : "Ajouter comme Admin"}
+      </Button>
+      <ul className="space-y-2">
+        {(admins.data ?? []).map((a) => (
+          <li key={`${a.user_id}-${a.role}`} className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm text-foreground">{a.email}</p>
+              <p className="text-[0.68rem] uppercase tracking-wide text-primary">{a.role}</p>
+            </div>
+            {a.role === "admin" && (
+              <Button size="sm" variant="outline" disabled={removeMut.isPending} onClick={() => removeMut.mutate(a.user_id)}>
+                Révoquer
+              </Button>
+            )}
+          </li>
+        ))}
+        {admins.isLoading && <li className="text-xs text-muted-foreground">Chargement…</li>}
+      </ul>
+    </div>
+  );
+}
+
+function ReviewRequests() {
+  const qc = useQueryClient();
+  const [err, setErr] = useState<string | null>(null);
+  const reqs = useQuery({
+    queryKey: ["verification-requests"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("verification_requests")
+        .select("*")
+        .eq("state", "En attente")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const review = useMutation({
+    mutationFn: async (v: { id: string; approve: boolean }) => {
+      const { error } = await (supabase.rpc as never as (n: string, a: object) => Promise<{ error: Error | null }>)(
+        "review_verification",
+        { _request_id: v.id, _approve: v.approve },
+      );
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setErr(null);
+      void reqs.refetch();
+      void qc.invalidateQueries({ queryKey: ["members"] });
+    },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec."),
+  });
+  if (reqs.isLoading) return <p className="text-xs text-muted-foreground">Chargement…</p>;
+  if (!reqs.data?.length) return <p className="text-xs text-muted-foreground">Aucune demande en attente.</p>;
+  return (
+    <div className="grid gap-3">
+      {err && <p className="text-xs text-destructive">{err}</p>}
+      {reqs.data.map((r) => (
+        <div key={r.id} className="rounded-xl border border-border p-3 text-sm">
+          <p className="font-semibold text-foreground">{r.first_name} {r.last_name}</p>
+          <p className="font-mono text-xs text-muted-foreground">{r.serial}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Né(e) à {r.birth_place} le {r.birth_date.replace(/-/g, "/")} · {r.lf_function}
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" disabled={review.isPending} onClick={() => review.mutate({ id: r.id, approve: true })}>Valider</Button>
+            <Button size="sm" variant="outline" disabled={review.isPending} onClick={() => review.mutate({ id: r.id, approve: false })}>Refuser</Button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
