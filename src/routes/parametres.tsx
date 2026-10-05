@@ -781,9 +781,9 @@ function AuditLog() {
         const d = (e.details ?? {}) as Record<string, unknown>;
         const actor = e.actor_id ? e.names.get(e.actor_id) ?? "Administrateur" : "Système";
         const target = e.target_user_id
-          ? e.names.get(e.target_user_id) ?? (typeof d.email === "string" ? d.email : "un membre")
-          : typeof d.title === "string" && d.title
-            ? `« ${d.title} »`
+          ? e.names.get(e.target_user_id) ?? (typeof d["email"] === "string" ? d["email"] : "un membre")
+          : typeof d["title"] === "string" && d["title"]
+            ? `« ${d["title"]} »`
             : "";
         return (
           <li key={e.id} className="rounded-xl border border-border px-3 py-2">

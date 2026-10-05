@@ -24,7 +24,7 @@ export function PlatinumBadge({
   className = "h-5 w-5",
   variant = "platinum",
 }: {
-  className?: string;
+  className?: string | undefined;
   variant?: Variant;
 }) {
   const cx = 12;
@@ -62,7 +62,7 @@ export function VerificationBadge({
 }: {
   isCeo: boolean;
   verified: boolean;
-  className?: string;
+  className?: string | undefined;
 }) {
   if (isCeo) return <PlatinumBadge className={className} variant="platinum" />;
   if (verified) return <PlatinumBadge className={className} variant="blue" />;
