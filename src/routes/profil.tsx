@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AvatarViewer } from "@/components/AvatarViewer";
-import { PlatinumBadge } from "@/components/PlatinumBadge";
+import { VerificationBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
 import { lfLogo } from "@/lib/assets";
 import { lfMembers } from "@/lib/assets";
@@ -250,7 +250,7 @@ function ProfilComponent() {
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
                   {member?.status ?? "Non Vérifié"}
-                  {isCeo && <PlatinumBadge />}
+                  <VerificationBadge isCeo={isCeo} verified={member?.status === "Vérifié"} />
                 </span>
               </div>
 
