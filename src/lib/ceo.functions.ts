@@ -66,6 +66,12 @@ export const addAdmin = createServerFn({ method: "POST" })
       .from("user_roles")
       .upsert({ user_id: target.id, role: "admin" }, { onConflict: "user_id,role" });
     if (error) throw new Error(error.message);
+    await supabaseAdmin.from("audit_log").insert({
+      actor_id: context.userId,
+      action: "role_grant_admin",
+      target_user_id: target.id,
+      details: { email: data.email },
+    });
     return { ok: true, email: data.email };
   });
 
@@ -82,5 +88,12 @@ export const removeAdmin = createServerFn({ method: "POST" })
       .eq("user_id", data.userId)
       .eq("role", "admin");
     if (error) throw new Error(error.message);
+    const { data: u } = await supabaseAdmin.auth.admin.getUserById(data.userId);
+    await supabaseAdmin.from("audit_log").insert({
+      actor_id: context.userId,
+      action: "role_revoke_admin",
+      target_user_id: data.userId,
+      details: { email: u?.user?.email ?? "" },
+    });
     return { ok: true };
   });

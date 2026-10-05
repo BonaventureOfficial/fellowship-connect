@@ -45,7 +45,7 @@ const FONCTIONS = [
   "Membre",
 ];
 
-type Panel = "admins" | "review" | "verify" | "email" | "password" | "delete" | null;
+type Panel = "admins" | "review" | "log" | "verify" | "email" | "password" | "delete" | null;
 
 function ParametresComponent() {
   const { user, loading } = useAuth();
@@ -103,11 +103,21 @@ function ParametresComponent() {
           {isAdmin && (
             <SettingItem
               title="Valider les comptes"
-              subtitle="Demandes de vérification des membres"
+              subtitle="4 validations d'admins requises par compte"
               open={panel === "review"}
               onToggle={() => setPanel(panel === "review" ? null : "review")}
             >
-              <ReviewRequests />
+              <ReviewRequests myId={user.id} />
+            </SettingItem>
+          )}
+          {isAdmin && (
+            <SettingItem
+              title="Journal de sécurité"
+              subtitle="Qui a validé, refusé, publié ou changé les rôles"
+              open={panel === "log"}
+              onToggle={() => setPanel(panel === "log" ? null : "log")}
+            >
+              <AuditLog />
             </SettingItem>
           )}
           <SettingItem
@@ -116,6 +126,7 @@ function ParametresComponent() {
             open={panel === "verify"}
             onToggle={() => setPanel(panel === "verify" ? null : "verify")}
           >
+            <MyRequestStatus userId={user.id} />
             <VerifyForm userId={user.id} member={member ?? null} />
           </SettingItem>
 
@@ -596,7 +607,9 @@ function AdminManager() {
   );
 }
 
-function ReviewRequests() {
+const REQUIRED_APPROVALS = 4;
+
+function ReviewRequests({ myId }: { myId: string }) {
   const qc = useQueryClient();
   const [err, setErr] = useState<string | null>(null);
   const reqs = useQuery({
@@ -611,18 +624,31 @@ function ReviewRequests() {
       return data ?? [];
     },
   });
+  const myVotes = useQuery({
+    queryKey: ["my-votes", myId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("verification_votes")
+        .select("request_id,approve")
+        .eq("admin_id", myId);
+      if (error) throw error;
+      return new Map((data ?? []).map((v) => [v.request_id, v.approve]));
+    },
+  });
   const review = useMutation({
     mutationFn: async (v: { id: string; approve: boolean }) => {
-      const { error } = await (supabase.rpc as never as (n: string, a: object) => Promise<{ error: Error | null }>)(
-        "review_verification",
-        { _request_id: v.id, _approve: v.approve },
-      );
+      const { error } = await supabase.rpc("review_verification", {
+        _request_id: v.id,
+        _approve: v.approve,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       setErr(null);
       void reqs.refetch();
+      void myVotes.refetch();
       void qc.invalidateQueries({ queryKey: ["members"] });
+      void qc.invalidateQueries({ queryKey: ["audit-log"] });
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec."),
   });
@@ -630,20 +656,147 @@ function ReviewRequests() {
   if (!reqs.data?.length) return <p className="text-xs text-muted-foreground">Aucune demande en attente.</p>;
   return (
     <div className="grid gap-3">
+      <p className="text-xs text-muted-foreground">
+        Il faut {REQUIRED_APPROVALS} validations d'administrateurs différents pour vérifier un compte.
+      </p>
       {err && <p className="text-xs text-destructive">{err}</p>}
-      {reqs.data.map((r) => (
-        <div key={r.id} className="rounded-xl border border-border p-3 text-sm">
-          <p className="font-semibold text-foreground">{r.first_name} {r.last_name}</p>
-          <p className="font-mono text-xs text-muted-foreground">{r.serial}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Né(e) à {r.birth_place} le {r.birth_date.replace(/-/g, "/")} · {r.lf_function}
-          </p>
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" disabled={review.isPending} onClick={() => review.mutate({ id: r.id, approve: true })}>Valider</Button>
-            <Button size="sm" variant="outline" disabled={review.isPending} onClick={() => review.mutate({ id: r.id, approve: false })}>Refuser</Button>
+      {reqs.data.map((r) => {
+        const voted = myVotes.data?.get(r.id);
+        const own = r.user_id === myId;
+        return (
+          <div key={r.id} className="rounded-xl border border-border p-3 text-sm">
+            <p className="font-semibold text-foreground">{r.first_name} {r.last_name}</p>
+            <p className="font-mono text-xs text-muted-foreground">{r.serial}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Né(e) à {r.birth_place} le {r.birth_date.replace(/-/g, "/")} · {r.lf_function}
+            </p>
+            <ApprovalProgress approvals={r.approvals_count} refusals={r.refusals_count} />
+            {own ? (
+              <p className="mt-2 text-xs text-muted-foreground">C'est votre propre demande.</p>
+            ) : voted !== undefined ? (
+              <p className="mt-2 text-xs text-accent">
+                Vous avez déjà {voted ? "validé" : "refusé"} cette demande.
+              </p>
+            ) : (
+              <div className="mt-3 flex gap-2">
+                <Button size="sm" disabled={review.isPending} onClick={() => review.mutate({ id: r.id, approve: true })}>Valider</Button>
+                <Button size="sm" variant="outline" disabled={review.isPending} onClick={() => review.mutate({ id: r.id, approve: false })}>Refuser</Button>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
+  );
+}
+
+function ApprovalProgress({ approvals, refusals }: { approvals: number; refusals: number }) {
+  return (
+    <div className="mt-2">
+      <div className="flex gap-1">
+        {Array.from({ length: REQUIRED_APPROVALS }).map((_, i) => (
+          <span
+            key={i}
+            className={`h-1.5 flex-1 rounded-full ${i < approvals ? "bg-primary" : "bg-muted"}`}
+          />
+        ))}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {approvals}/{REQUIRED_APPROVALS} validateurs
+        {refusals > 0 ? ` · ${refusals} refus` : ""}
+      </p>
+    </div>
+  );
+}
+
+function MyRequestStatus({ userId }: { userId: string }) {
+  const q = useQuery({
+    queryKey: ["my-verification-request", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("verification_requests")
+        .select("id,state,approvals_count,refusals_count,created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  if (!q.data) return null;
+  const r = q.data;
+  return (
+    <div className="mb-4 rounded-xl border border-border bg-muted/40 p-3">
+      <p className="text-sm font-semibold text-foreground">
+        Ma demande : <span className="text-primary">{r.state}</span>
+      </p>
+      <ApprovalProgress approvals={r.approvals_count} refusals={r.refusals_count} />
+    </div>
+  );
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  verification_approve: "a validé la demande de",
+  verification_refuse: "a refusé la demande de",
+  account_verified: "a donné la 4e validation — compte vérifié :",
+  account_refused: "a donné le 4e refus — demande refusée :",
+  announcement_publish: "a publié une annonce",
+  announcement_edit: "a modifié une annonce",
+  announcement_delete: "a supprimé une annonce",
+  role_grant_admin: "a nommé Admin",
+  role_revoke_admin: "a révoqué l'Admin",
+};
+
+function AuditLog() {
+  const log = useQuery({
+    queryKey: ["audit-log"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("audit_log")
+        .select("id,actor_id,action,target_user_id,details,created_at")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      const ids = new Set<string>();
+      for (const e of data ?? []) {
+        if (e.actor_id) ids.add(e.actor_id);
+        if (e.target_user_id) ids.add(e.target_user_id);
+      }
+      const { data: ms } = ids.size
+        ? await supabase.from("members").select("user_id,first_name,last_name,serial").in("user_id", [...ids])
+        : { data: [] as { user_id: string; first_name: string; last_name: string; serial: string | null }[] };
+      const names = new Map(
+        (ms ?? []).map((m) => [m.user_id, `${m.first_name} ${m.last_name}`.trim() || m.serial || "Membre"]),
+      );
+      return (data ?? []).map((e) => ({ ...e, names }));
+    },
+  });
+  if (log.isLoading) return <p className="text-xs text-muted-foreground">Chargement…</p>;
+  if (log.error) return <p className="text-xs text-destructive">Journal indisponible.</p>;
+  if (!log.data?.length) return <p className="text-xs text-muted-foreground">Aucune action enregistrée.</p>;
+  return (
+    <ul className="space-y-2">
+      {log.data.map((e) => {
+        const d = (e.details ?? {}) as Record<string, unknown>;
+        const actor = e.actor_id ? e.names.get(e.actor_id) ?? "Administrateur" : "Système";
+        const target = e.target_user_id
+          ? e.names.get(e.target_user_id) ?? (typeof d["email"] === "string" ? d["email"] : "un membre")
+          : typeof d["title"] === "string" && d["title"]
+            ? `« ${d["title"]} »`
+            : "";
+        return (
+          <li key={e.id} className="rounded-xl border border-border px-3 py-2">
+            <p className="text-sm text-foreground">
+              <span className="font-semibold">{actor}</span> {ACTION_LABELS[e.action] ?? e.action}{" "}
+              <span className="font-semibold">{target}</span>
+            </p>
+            <p className="mt-0.5 text-[0.68rem] text-muted-foreground">
+              {new Date(e.created_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}
+            </p>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
