@@ -1,7 +1,7 @@
 import { useAvatarUrl } from "@/lib/useAvatarUrl";
 import { useState } from "react";
 import { AvatarViewer } from "@/components/AvatarViewer";
-import { PlatinumBadge } from "@/components/PlatinumBadge";
+import { VerificationBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
 import type { AppRole } from "@/lib/roles";
 
@@ -46,7 +46,7 @@ export function MemberCard({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-sm font-semibold text-foreground">{name}</p>
-          {isCeo && <PlatinumBadge />}
+          <VerificationBadge isCeo={isCeo} verified={verified} />
         </div>
         <p className="mt-1 font-mono text-[0.72rem] tracking-wide text-muted-foreground">
           {member.serial ?? "LF-…"}
