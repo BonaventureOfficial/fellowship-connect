@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CeoRouteImport } from './routes/ceo'
 import { Route as ParametresRouteImport } from './routes/parametres'
 import { Route as ProfilRouteImport } from './routes/profil'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -46,6 +47,11 @@ const ProfilRoute = ProfilRouteImport.update({
   path: '/profil',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +60,7 @@ export interface FileRoutesByFullPath {
   '/ceo': typeof CeoRoute
   '/parametres': typeof ParametresRoute
   '/profil': typeof ProfilRoute
+  '/reset-password': typeof ResetPasswordRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -62,6 +69,7 @@ export interface FileRoutesByTo {
   '/ceo': typeof CeoRoute
   '/parametres': typeof ParametresRoute
   '/profil': typeof ProfilRoute
+  '/reset-password': typeof ResetPasswordRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -71,12 +79,27 @@ export interface FileRoutesById {
   '/ceo': typeof CeoRoute
   '/parametres': typeof ParametresRoute
   '/profil': typeof ProfilRoute
+  '/reset-password': typeof ResetPasswordRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/annonces' | '/auth' | '/ceo' | '/parametres' | '/profil'
+  fullPaths:
+    | '/'
+    | '/annonces'
+    | '/auth'
+    | '/ceo'
+    | '/parametres'
+    | '/profil'
+    | '/reset-password'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/annonces' | '/auth' | '/ceo' | '/parametres' | '/profil'
+  to:
+    | '/'
+    | '/annonces'
+    | '/auth'
+    | '/ceo'
+    | '/parametres'
+    | '/profil'
+    | '/reset-password'
   id:
     | '__root__'
     | '/'
@@ -85,6 +108,7 @@ export interface FileRouteTypes {
     | '/ceo'
     | '/parametres'
     | '/profil'
+    | '/reset-password'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -94,6 +118,7 @@ export interface RootRouteChildren {
   CeoRoute: typeof CeoRoute
   ParametresRoute: typeof ParametresRoute
   ProfilRoute: typeof ProfilRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -140,6 +165,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfilRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -150,6 +182,7 @@ const rootRouteChildren: RootRouteChildren = {
   CeoRoute: CeoRoute,
   ParametresRoute: ParametresRoute,
   ProfilRoute: ProfilRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
