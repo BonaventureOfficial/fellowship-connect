@@ -696,6 +696,7 @@ function ReviewRequests({ myId }: { myId: string }) {
         const own = r.user_id === myId;
         return (
           <div key={r.id} className="rounded-xl border border-border p-3 text-sm">
+            <PortraitThumb path={(r as { portrait_path?: string | null }).portrait_path ?? null} />
             <p className="font-semibold text-foreground">{r.first_name} {r.last_name}</p>
             <p className="font-mono text-xs text-muted-foreground">{r.serial}</p>
             <p className="mt-1 text-xs text-muted-foreground">
