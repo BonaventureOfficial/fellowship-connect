@@ -240,6 +240,7 @@ function VerifyForm({
   const [birthDate, setBirthDate] = useState("");
   const [fonction, setFonction] = useState("");
   const [serial, setSerial] = useState("");
+  const [portrait, setPortrait] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -273,6 +274,13 @@ function VerifyForm({
         throw new Error("Date de naissance invalide. Format : Année/Mois/Jour (ex : 1998/05/21).");
       }
       const isoDate = `${m[1]}-${m[2]}-${m[3]}`;
+      if (!portrait) throw new Error("Veuillez ajouter une photo portrait.");
+      if (!portrait.type.startsWith("image/")) throw new Error("La photo portrait doit être une image.");
+      if (portrait.size > 10 * 1024 * 1024) throw new Error("La photo portrait ne doit pas dépasser 10 Mo.");
+      const ext = (portrait.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const path = `${userId}/${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("portraits").upload(path, portrait, { contentType: portrait.type });
+      if (up.error) throw up.error;
       const { error } = await supabase.from("verification_requests").insert({
         user_id: userId,
         first_name: firstName.trim(),
@@ -281,7 +289,8 @@ function VerifyForm({
         birth_date: isoDate,
         lf_function: fonction.trim(),
         serial: serial.trim(),
-      });
+        portrait_path: path,
+      } as never);
       if (error) throw error;
       setMsg(
         "Demande de vérification envoyée. Elle sera traitée prochainement.",
