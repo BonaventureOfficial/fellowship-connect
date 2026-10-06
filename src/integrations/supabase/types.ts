@@ -147,6 +147,7 @@ export type Database = {
           id: string
           last_name: string
           lf_function: string
+          portrait_path: string | null
           refusals_count: number
           serial: string
           state: string
@@ -162,6 +163,7 @@ export type Database = {
           id?: string
           last_name: string
           lf_function: string
+          portrait_path?: string | null
           refusals_count?: number
           serial: string
           state?: string
@@ -177,6 +179,7 @@ export type Database = {
           id?: string
           last_name?: string
           lf_function?: string
+          portrait_path?: string | null
           refusals_count?: number
           serial?: string
           state?: string

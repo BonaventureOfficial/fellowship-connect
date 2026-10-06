@@ -240,6 +240,7 @@ function VerifyForm({
   const [birthDate, setBirthDate] = useState("");
   const [fonction, setFonction] = useState("");
   const [serial, setSerial] = useState("");
+  const [portrait, setPortrait] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -273,6 +274,13 @@ function VerifyForm({
         throw new Error("Date de naissance invalide. Format : Année/Mois/Jour (ex : 1998/05/21).");
       }
       const isoDate = `${m[1]}-${m[2]}-${m[3]}`;
+      if (!portrait) throw new Error("Veuillez ajouter une photo portrait.");
+      if (!portrait.type.startsWith("image/")) throw new Error("La photo portrait doit être une image.");
+      if (portrait.size > 10 * 1024 * 1024) throw new Error("La photo portrait ne doit pas dépasser 10 Mo.");
+      const ext = (portrait.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const path = `${userId}/${Date.now()}.${ext}`;
+      const up = await supabase.storage.from("portraits").upload(path, portrait, { contentType: portrait.type });
+      if (up.error) throw up.error;
       const { error } = await supabase.from("verification_requests").insert({
         user_id: userId,
         first_name: firstName.trim(),
@@ -281,7 +289,8 @@ function VerifyForm({
         birth_date: isoDate,
         lf_function: fonction.trim(),
         serial: serial.trim(),
-      });
+        portrait_path: path,
+      } as never);
       if (error) throw error;
       setMsg(
         "Demande de vérification envoyée. Elle sera traitée prochainement.",
@@ -367,6 +376,28 @@ function VerifyForm({
           placeholder="LF-0001"
           onChange={(e) => setSerial(e.target.value)}
         />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="v-portrait">Ajouter photo portrait (max 10 Mo)</Label>
+        <Input
+          id="v-portrait"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            if (f && f.size > 10 * 1024 * 1024) {
+              setErr("La photo portrait ne doit pas dépasser 10 Mo.");
+              e.target.value = "";
+              setPortrait(null);
+              return;
+            }
+            setErr(null);
+            setPortrait(f);
+          }}
+        />
+        {portrait && (
+          <img src={URL.createObjectURL(portrait)} alt="Aperçu portrait" className="mt-2 h-28 w-24 rounded-lg object-cover" />
+        )}
       </div>
       <Feedback err={err} msg={msg} />
       <Button disabled={busy} onClick={() => void submit()}>
@@ -665,6 +696,7 @@ function ReviewRequests({ myId }: { myId: string }) {
         const own = r.user_id === myId;
         return (
           <div key={r.id} className="rounded-xl border border-border p-3 text-sm">
+            <PortraitThumb path={(r as { portrait_path?: string | null }).portrait_path ?? null} />
             <p className="font-semibold text-foreground">{r.first_name} {r.last_name}</p>
             <p className="font-mono text-xs text-muted-foreground">{r.serial}</p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -798,5 +830,26 @@ function AuditLog() {
         );
       })}
     </ul>
+  );
+}
+
+function PortraitThumb({ path }: { path: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    let alive = true;
+    void supabase.storage.from("portraits").createSignedUrl(path, 3600).then(({ data }) => {
+      if (alive) setUrl(data?.signedUrl ?? null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+  if (!path) return <p className="mb-2 text-xs text-muted-foreground">Pas de photo portrait.</p>;
+  if (!url) return <div className="mb-2 h-28 w-24 animate-pulse rounded-lg bg-muted" />;
+  return (
+    <a href={url} target="_blank" rel="noreferrer">
+      <img src={url} alt="Photo portrait" className="mb-2 h-28 w-24 rounded-lg object-cover" />
+    </a>
   );
 }
