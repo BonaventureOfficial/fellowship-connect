@@ -79,6 +79,27 @@ function AuthComponent() {
     }
   };
 
+  const forgotPassword = async () => {
+    setErr(null);
+    setMsg(null);
+    if (!email) {
+      setErr("Entrez d'abord votre email, puis cliquez sur « Mot de passe oublié ».");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      setMsg("Un email de réinitialisation vous a été envoyé. Vérifiez votre boîte mail.");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Envoi impossible.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 pb-24 pt-10">
       <div className="text-center">
@@ -165,6 +186,17 @@ function AuthComponent() {
             ? "J'ai déjà un compte — Se connecter"
             : "Créer un nouveau compte"}
         </button>
+
+        {mode === "signin" && (
+          <button
+            type="button"
+            disabled={busy}
+            className="w-full text-center text-xs font-medium text-primary underline-offset-4 hover:underline"
+            onClick={forgotPassword}
+          >
+            Mot de passe oublié ?
+          </button>
+        )}
       </form>
     </main>
   );
