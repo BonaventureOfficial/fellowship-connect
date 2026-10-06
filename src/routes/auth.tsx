@@ -186,6 +186,17 @@ function AuthComponent() {
             ? "J'ai déjà un compte — Se connecter"
             : "Créer un nouveau compte"}
         </button>
+
+        {mode === "signin" && (
+          <button
+            type="button"
+            disabled={busy}
+            className="w-full text-center text-xs font-medium text-primary underline-offset-4 hover:underline"
+            onClick={forgotPassword}
+          >
+            Mot de passe oublié ?
+          </button>
+        )}
       </form>
     </main>
   );
