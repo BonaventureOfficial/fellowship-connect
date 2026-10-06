@@ -377,6 +377,28 @@ function VerifyForm({
           onChange={(e) => setSerial(e.target.value)}
         />
       </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="v-portrait">Ajouter photo portrait (max 10 Mo)</Label>
+        <Input
+          id="v-portrait"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            if (f && f.size > 10 * 1024 * 1024) {
+              setErr("La photo portrait ne doit pas dépasser 10 Mo.");
+              e.target.value = "";
+              setPortrait(null);
+              return;
+            }
+            setErr(null);
+            setPortrait(f);
+          }}
+        />
+        {portrait && (
+          <img src={URL.createObjectURL(portrait)} alt="Aperçu portrait" className="mt-2 h-28 w-24 rounded-lg object-cover" />
+        )}
+      </div>
       <Feedback err={err} msg={msg} />
       <Button disabled={busy} onClick={() => void submit()}>
         Envoyer la demande de Vérification
