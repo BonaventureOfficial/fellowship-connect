@@ -832,3 +832,24 @@ function AuditLog() {
     </ul>
   );
 }
+
+function PortraitThumb({ path }: { path: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path) return;
+    let alive = true;
+    void supabase.storage.from("portraits").createSignedUrl(path, 3600).then(({ data }) => {
+      if (alive) setUrl(data?.signedUrl ?? null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+  if (!path) return <p className="mb-2 text-xs text-muted-foreground">Pas de photo portrait.</p>;
+  if (!url) return <div className="mb-2 h-28 w-24 animate-pulse rounded-lg bg-muted" />;
+  return (
+    <a href={url} target="_blank" rel="noreferrer">
+      <img src={url} alt="Photo portrait" className="mb-2 h-28 w-24 rounded-lg object-cover" />
+    </a>
+  );
+}
