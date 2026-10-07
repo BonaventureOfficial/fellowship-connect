@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "name": "living-connect",
+  "name": "living-connect",
   "main": ".output/server/index.mjs",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -9,5 +9,9 @@
   },
   "observability": {
     "enabled": true
+  },
+  "vars": {
+    "SUPABASE_URL": "https://sadkljntcdfdwebbyijx.supabase.co",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_61lUt9Y1NGm-gWR7uDG9zQ_zNkpJd9d"
   }
 }
