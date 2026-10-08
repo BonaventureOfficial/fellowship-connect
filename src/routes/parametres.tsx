@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Member } from "@/lib/members";
 import { useMutation } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useMyRoles } from "@/lib/roles";
 import { addAdmin, listAdmins, removeAdmin } from "@/lib/ceo.functions";
 
@@ -583,9 +582,9 @@ function DeleteForm({ onDeleted }: { onDeleted: () => Promise<void> }) {
 
 
 function AdminManager() {
-  const fetchAdmins = useServerFn(listAdmins);
-  const doAdd = useServerFn(addAdmin);
-  const doRemove = useServerFn(removeAdmin);
+  const fetchAdmins = listAdmins;
+  const doAdd = addAdmin;
+  const doRemove = removeAdmin;
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);

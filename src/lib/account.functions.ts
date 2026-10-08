@@ -1,20 +1,10 @@
-import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { supabase } from "@/integrations/supabase/client";
 
-/** Suppression définitive du compte du membre connecté. */
-export const deleteMyAccount = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: { confirm: boolean }) => {
-    if (!input?.confirm) throw new Error("Confirmation requise.");
-    return input;
-  })
-  .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import(
-      "@/integrations/supabase/client.server"
-    );
-    const userId = context.userId;
-    await supabaseAdmin.from("members").delete().eq("user_id", userId);
-    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
-    if (error) throw new Error(error.message);
-    return { ok: true };
-  });
+/** Suppression définitive du compte du membre connecté (fonction sécurisée en base). */
+export async function deleteMyAccount({ data }: { data: { confirm: boolean } }) {
+  if (!data?.confirm) throw new Error("Confirmation requise.");
+  const { error } = await (supabase.rpc as any)("lf_delete_my_account");
+  if (error) throw new Error(error.message);
+  await supabase.auth.signOut();
+  return { ok: true };
+}

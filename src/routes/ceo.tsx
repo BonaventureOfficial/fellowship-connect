@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
 import { useAuth } from "@/hooks/useAuth";
 import { useMyRoles } from "@/lib/roles";
 import { addAdmin, listAdmins, removeAdmin } from "@/lib/ceo.functions";
@@ -37,9 +36,9 @@ function CeoComponent() {
   const { isCeo, isLoading } = useMyRoles(user?.id);
   const navigate = useNavigate();
 
-  const fetchAdmins = useServerFn(listAdmins);
-  const doAdd = useServerFn(addAdmin);
-  const doRemove = useServerFn(removeAdmin);
+  const fetchAdmins = listAdmins;
+  const doAdd = addAdmin;
+  const doRemove = removeAdmin;
 
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
