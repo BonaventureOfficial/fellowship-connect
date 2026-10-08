@@ -232,6 +232,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      lf_add_admin: { Args: { _email: string }; Returns: undefined }
+      lf_delete_my_account: { Args: never; Returns: undefined }
+      lf_list_admins: {
+        Args: never
+        Returns: {
+          email: string
+          role: string
+          user_id: string
+        }[]
+      }
+      lf_remove_admin: { Args: { _user_id: string }; Returns: undefined }
       review_verification: {
         Args: { _approve: boolean; _request_id: string }
         Returns: undefined
