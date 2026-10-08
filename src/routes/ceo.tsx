@@ -37,9 +37,9 @@ function CeoComponent() {
   const { isCeo, isLoading } = useMyRoles(user?.id);
   const navigate = useNavigate();
 
-  const fetchAdmins = useServerFn(listAdmins);
-  const doAdd = useServerFn(addAdmin);
-  const doRemove = useServerFn(removeAdmin);
+  const fetchAdmins = listAdmins;
+  const doAdd = addAdmin;
+  const doRemove = removeAdmin;
 
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
