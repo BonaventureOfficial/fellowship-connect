@@ -14,6 +14,7 @@ import {
   useAnnouncements,
   type Announcement,
 } from "@/lib/announcements";
+import { AnnouncementReactions } from "@/components/AnnouncementReactions";
 
 export const Route = createFileRoute("/annonces")({
   head: () => ({
@@ -45,15 +46,28 @@ function formatDate(iso: string) {
   });
 }
 
-function Editor({ onPublished }: { onPublished: () => void }) {
+function Editor({
+  onPublished,
+  initial,
+  onCancel,
+}: {
+  onPublished: () => void;
+  initial?: Announcement;
+  onCancel?: () => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  const [title, setTitle] = useState("");
-  const [bg, setBg] = useState("#12121c");
-  const [fg, setFg] = useState("#f5f5f7");
-  const [font, setFont] = useState<string>("sans");
-  const [underlineTitle, setUnderlineTitle] = useState(true);
+  const [initFont, initFlag] = (initial?.font_family ?? "sans").split("|");
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [bg, setBg] = useState(initial?.bg_color ?? "#12121c");
+  const [fg, setFg] = useState(initial?.text_color ?? "#f5f5f7");
+  const [font, setFont] = useState<string>(initFont || "sans");
+  const [underlineTitle, setUnderlineTitle] = useState(initial ? initFlag === "u" : true);
   const [saving, setSaving] = useState(false);
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (initial && ref.current) ref.current.innerHTML = sanitize(initial.content_html);
+  }, [initial]);
 
   const cmd = (name: string) => {
     ref.current?.focus();
@@ -71,29 +85,33 @@ function Editor({ onPublished }: { onPublished: () => void }) {
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from("announcements").insert({
-      author_id: user.id,
+    const fields = {
       title: title.trim(),
       content_html: html,
       bg_color: bg,
       text_color: fg,
       font_family: underlineTitle ? `${font}|u` : font,
-    });
+    };
+    const { error } = initial
+      ? await supabase.from("announcements").update(fields).eq("id", initial.id)
+      : await supabase.from("announcements").insert({ ...fields, author_id: user.id });
     setSaving(false);
     if (error) {
       toast.error(error.message);
       return;
     }
-    setTitle("");
-    if (ref.current) ref.current.innerHTML = "";
-    toast.success("Annonce publiée.");
+    if (!initial) {
+      setTitle("");
+      if (ref.current) ref.current.innerHTML = "";
+    }
+    toast.success(initial ? "Annonce modifiée." : "Annonce publiée.");
     onPublished();
   };
 
   return (
     <section className="mt-6 rounded-2xl border border-border bg-card p-4">
       <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-        Éditeur d'annonce
+        {initial ? "Modifier l'annonce" : "Éditeur d'annonce"}
       </h2>
 
       <input
@@ -185,26 +203,41 @@ function Editor({ onPublished }: { onPublished: () => void }) {
         }}
       />
 
-      <button
-        type="button"
-        onClick={publish}
-        disabled={saving}
-        className="mt-3 w-full rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-      >
-        {saving ? "Publication…" : "Publier l'annonce"}
-      </button>
+      <div className="mt-3 flex gap-2">
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm text-foreground hover:bg-secondary"
+          >
+            Annuler
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={publish}
+          disabled={saving}
+          className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? "Enregistrement…" : initial ? "Enregistrer les modifications" : "Publier l'annonce"}
+        </button>
+      </div>
     </section>
   );
 }
 
 function AnnouncementCard({
   a,
-  canDelete,
+  isStaff,
+  userId,
   onDelete,
+  onEdit,
 }: {
   a: Announcement;
-  canDelete: boolean;
+  isStaff: boolean;
+  userId?: string;
   onDelete: (id: string) => void;
+  onEdit: (a: Announcement) => void;
 }) {
   const [font, flag] = a.font_family.split("|");
   return (
@@ -223,14 +256,25 @@ function AnnouncementCard({
           >
             {a.title}
           </h2>
-          {canDelete && (
-            <button
-              type="button"
-              onClick={() => onDelete(a.id)}
-              className="shrink-0 rounded-lg border border-current/30 px-2 py-1 text-[0.65rem] opacity-70 hover:opacity-100"
-            >
-              Supprimer
-            </button>
+          {isStaff && (
+            <div className="flex shrink-0 gap-1">
+              <button
+                type="button"
+                onClick={() => onEdit(a)}
+                className="rounded-lg border border-current/30 px-2 py-1 text-[0.65rem] opacity-70 hover:opacity-100"
+              >
+                Modifier
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm("Supprimer cette annonce ?")) onDelete(a.id);
+                }}
+                className="rounded-lg border border-current/30 px-2 py-1 text-[0.65rem] opacity-70 hover:opacity-100"
+              >
+                Supprimer
+              </button>
+            </div>
           )}
         </div>
         <div
@@ -239,7 +283,11 @@ function AnnouncementCard({
         />
         <p className="mt-3 text-[0.7rem] opacity-70">
           Publiée le {formatDate(a.published_at)}
+          {a.updated_at && new Date(a.updated_at).getTime() - new Date(a.published_at).getTime() > 60000
+            ? ` · modifiée le ${formatDate(a.updated_at)}`
+            : ""}
         </p>
+        <AnnouncementReactions announcementId={a.id} userId={userId} isStaff={isStaff} />
       </div>
     </li>
   );
@@ -250,10 +298,13 @@ function AnnoncesComponent() {
   const { isAdmin } = useMyRoles(user?.id);
   const { data: annonces = [], isLoading } = useAnnouncements();
   const qc = useQueryClient();
+  const [editing, setEditing] = useState<Announcement | null>(null);
 
   useEffect(() => {
     markAnnouncementsSeen();
   }, [annonces.length]);
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ["announcements"] });
 
   const remove = async (id: string) => {
     const { error } = await supabase.from("announcements").delete().eq("id", id);
@@ -262,7 +313,7 @@ function AnnoncesComponent() {
       return;
     }
     toast.success("Annonce supprimée.");
-    qc.invalidateQueries({ queryKey: ["announcements"] });
+    refresh();
   };
 
   return (
@@ -281,13 +332,20 @@ function AnnoncesComponent() {
         </div>
       </header>
 
-      {isAdmin && (
-        <Editor
-          onPublished={() =>
-            qc.invalidateQueries({ queryKey: ["announcements"] })
-          }
-        />
-      )}
+      {isAdmin &&
+        (editing ? (
+          <Editor
+            key={editing.id}
+            initial={editing}
+            onCancel={() => setEditing(null)}
+            onPublished={() => {
+              setEditing(null);
+              refresh();
+            }}
+          />
+        ) : (
+          <Editor key="new" onPublished={refresh} />
+        ))}
 
       <section className="mt-6">
         {isLoading ? (
@@ -314,8 +372,13 @@ function AnnoncesComponent() {
               <AnnouncementCard
                 key={a.id}
                 a={a}
-                canDelete={isAdmin}
+                isStaff={isAdmin}
+                userId={user?.id}
                 onDelete={remove}
+                onEdit={(x) => {
+                  setEditing(x);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
               />
             ))}
           </ul>

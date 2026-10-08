@@ -12,6 +12,7 @@ export interface Announcement {
   text_color: string;
   font_family: string;
   published_at: string;
+  updated_at?: string;
 }
 
 export const FONT_OPTIONS = [
@@ -29,7 +30,7 @@ export function fontCss(value: string) {
 export async function fetchAnnouncements(): Promise<Announcement[]> {
   const { data, error } = await supabase
     .from("announcements")
-    .select("id,author_id,title,content_html,bg_color,text_color,font_family,published_at")
+    .select("id,author_id,title,content_html,bg_color,text_color,font_family,published_at,updated_at")
     .order("published_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as Announcement[];

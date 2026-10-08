@@ -8,6 +8,13 @@
       "when": 1791447652482,
       "tag": "0000_cf_rpc_admin_account",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791453046842,
+      "tag": "0001_announcement_reactions",
+      "breakpoints": true
     }
   ]
 }
