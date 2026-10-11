@@ -235,7 +235,7 @@ function AnnouncementCard({
 }: {
   a: Announcement;
   isStaff: boolean;
-  userId?: string;
+  userId?: string | undefined;
   onDelete: (id: string) => void;
   onEdit: (a: Announcement) => void;
 }) {

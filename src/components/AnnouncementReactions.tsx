@@ -53,7 +53,7 @@ export function AnnouncementReactions({
   isStaff,
 }: {
   announcementId: string;
-  userId?: string;
+  userId?: string | undefined;
   isStaff: boolean;
 }) {
   const qc = useQueryClient();
@@ -76,7 +76,7 @@ export function AnnouncementReactions({
   const refresh = () => qc.invalidateQueries({ queryKey: ["announcement-reactions"] });
 
   const toggleLike = async () => {
-    if (!userId) return toast.error("Connectez-vous pour aimer.");
+    if (!userId) { toast.error("Connectez-vous pour aimer."); return; }
     const q = liked
       ? supabase.from("announcement_likes").delete().eq("announcement_id", announcementId).eq("user_id", userId)
       : supabase.from("announcement_likes").insert({ announcement_id: announcementId, user_id: userId });
@@ -86,7 +86,7 @@ export function AnnouncementReactions({
   };
 
   const send = async (content: string, parent: string | null) => {
-    if (!userId) return toast.error("Connectez-vous pour commenter.");
+    if (!userId) { toast.error("Connectez-vous pour commenter."); return; }
     if (!content.trim()) return;
     setBusy(true);
     const { error } = await supabase.from("announcement_comments").insert({
@@ -96,7 +96,7 @@ export function AnnouncementReactions({
       content: content.trim().slice(0, 2000),
     });
     setBusy(false);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     if (parent) {
       setReplyText("");
       setReplyTo(null);
@@ -106,7 +106,7 @@ export function AnnouncementReactions({
 
   const remove = async (id: string) => {
     const { error } = await supabase.from("announcement_comments").delete().eq("id", id);
-    if (error) return toast.error(error.message);
+    if (error) { toast.error(error.message); return; }
     refresh();
   };
 
