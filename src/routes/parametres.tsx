@@ -121,12 +121,15 @@ function ParametresComponent() {
           )}
           <SettingItem
             title="Vérifier Votre Compte"
-            subtitle="Envoyer une demande de vérification"
+            subtitle={
+              member?.status === "Vérifié"
+                ? "Compte déjà vérifié"
+                : "Demande de vérification de compte"
+            }
             open={panel === "verify"}
             onToggle={() => setPanel(panel === "verify" ? null : "verify")}
           >
-            <MyRequestStatus userId={user.id} />
-            <VerifyForm userId={user.id} member={member ?? null} />
+            <VerificationSection userId={user.id} member={member ?? null} />
           </SettingItem>
 
           <SettingItem
@@ -179,7 +182,6 @@ function SettingItem({
   title: string;
   subtitle: string;
   open: boolean;
-  onToggle: () => void;
   danger?: boolean;
   children: React.ReactNode;
 }) {
@@ -229,10 +231,13 @@ function Feedback({ err, msg }: { err: string | null; msg: string | null }) {
 function VerifyForm({
   userId,
   member,
+  onSubmitted,
 }: {
   userId: string;
   member: Member | null;
+  onSubmitted?: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [birthPlace, setBirthPlace] = useState("");
@@ -257,6 +262,21 @@ function VerifyForm({
     setErr(null);
     setMsg(null);
     try {
+      // Bloquer si une demande est déjà en attente
+      const { data: existingPending, error: checkErr } = await supabase
+        .from("verification_requests")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("state", "En attente")
+        .maybeSingle();
+
+      if (checkErr) throw checkErr;
+      if (existingPending) {
+        throw new Error(
+          "Vous avez déjà une demande de vérification en attente. Une seule demande est autorisée.",
+        );
+      }
+
       if (
         !firstName.trim() ||
         !lastName.trim() ||
@@ -294,6 +314,9 @@ function VerifyForm({
       setMsg(
         "Demande de vérification envoyée. Elle sera traitée prochainement.",
       );
+      void queryClient.invalidateQueries({ queryKey: ["my-verification-request", userId] });
+      void queryClient.invalidateQueries({ queryKey: ["verification-requests"] });
+      onSubmitted?.();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Échec de l'envoi.");
     } finally {
@@ -418,21 +441,20 @@ function EmailForm({ currentEmail }: { currentEmail: string }) {
     setErr(null);
     setMsg(null);
     try {
-      if (
-        oldEmail.trim().toLowerCase() !== currentEmail.trim().toLowerCase()
-      ) {
-        throw new Error("L'ancien email ne correspond pas à votre compte.");
+      if (!newEmail.includes("@")) throw new Error("Nouvel email invalide.");
+      if (oldEmail.trim().toLowerCase() !== currentEmail.toLowerCase()) {
+        throw new Error("L'ancien email ne correspond pas à votre adresse actuelle.");
       }
-      if (!/^\S+@\S+\.\S+$/.test(newEmail.trim())) {
-        throw new Error("Nouvel email invalide.");
+      if (oldEmail.trim().toLowerCase() === newEmail.trim().toLowerCase()) {
+        throw new Error("Le nouvel email doit être différent de l'ancien.");
       }
-      const { error } = await supabase.auth.updateUser({
-        email: newEmail.trim(),
-      });
+      const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
       if (error) throw error;
       setMsg(
-        "Un lien de confirmation a été envoyé à votre nouvelle adresse email.",
+        "Un email de confirmation a été envoyé à vos deux adresses. Confirmez pour finaliser le changement.",
       );
+      setOldEmail("");
+      setNewEmail("");
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Échec du changement d'email.");
     } finally {
@@ -447,8 +469,8 @@ function EmailForm({ currentEmail }: { currentEmail: string }) {
         <Input
           id="e-old"
           type="email"
+          placeholder={currentEmail}
           value={oldEmail}
-          maxLength={255}
           onChange={(e) => setOldEmail(e.target.value)}
         />
       </div>
@@ -457,14 +479,14 @@ function EmailForm({ currentEmail }: { currentEmail: string }) {
         <Input
           id="e-new"
           type="email"
+          placeholder="nouveau@livingfellowship.com"
           value={newEmail}
-          maxLength={255}
           onChange={(e) => setNewEmail(e.target.value)}
         />
       </div>
       <Feedback err={err} msg={msg} />
       <Button disabled={busy} onClick={() => void submit()}>
-        Changer mon email
+        Mettre à jour l'email
       </Button>
     </div>
   );
@@ -482,25 +504,21 @@ function PasswordForm({ email }: { email: string }) {
     setErr(null);
     setMsg(null);
     try {
-      if (newPassword.length < 6) {
-        throw new Error(
-          "Le nouveau mot de passe doit contenir au moins 6 caractères.",
-        );
+      if (newPassword.length < 8) {
+        throw new Error("Le nouveau mot de passe doit comporter au moins 8 caractères.");
       }
-      const { error: signErr } = await supabase.auth.signInWithPassword({
+      const check = await supabase.auth.signInWithPassword({
         email,
         password: oldPassword,
       });
-      if (signErr) throw new Error("Ancien mot de passe incorrect.");
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      if (check.error) throw new Error("Ancien mot de passe incorrect.");
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
+      setMsg("Mot de passe mis à jour avec succès.");
       setOldPassword("");
       setNewPassword("");
-      setMsg("Mot de passe mis à jour.");
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Échec de la mise à jour.");
+      setErr(e instanceof Error ? e.message : "Échec du changement de mot de passe.");
     } finally {
       setBusy(false);
     }
@@ -513,6 +531,7 @@ function PasswordForm({ email }: { email: string }) {
         <Input
           id="p-old"
           type="password"
+          autoComplete="current-password"
           value={oldPassword}
           onChange={(e) => setOldPassword(e.target.value)}
         />
@@ -522,13 +541,15 @@ function PasswordForm({ email }: { email: string }) {
         <Input
           id="p-new"
           type="password"
+          autoComplete="new-password"
+          placeholder="Au moins 8 caractères"
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
         />
       </div>
       <Feedback err={err} msg={msg} />
       <Button disabled={busy} onClick={() => void submit()}>
-        Changer mon mot de passe
+        Mettre à jour le mot de passe
       </Button>
     </div>
   );
@@ -543,7 +564,8 @@ function DeleteForm({ onDeleted }: { onDeleted: () => Promise<void> }) {
     setBusy(true);
     setErr(null);
     try {
-      await deleteMyAccount({ data: { confirm: true } });
+      if (!accepted) throw new Error("Veuillez cocher la confirmation.");
+      await deleteMyAccount();
       await onDeleted();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Échec de la suppression.");
@@ -553,80 +575,95 @@ function DeleteForm({ onDeleted }: { onDeleted: () => Promise<void> }) {
 
   return (
     <div className="grid gap-3">
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        En supprimant mon compte, je reconnais qu'il s'agit d'une décision
-        strictement personnelle. Je ne réclame aucune part de mes contributions
-        au sein de Living Fellowship et je ne demanderai pas la récupération de
-        ce compte, qui est supprimé de façon définitive.
+      <p className="text-xs text-muted-foreground">
+        La suppression de votre compte effacera votre profil, vos annonces et toutes
+        les données associées. Cette action est irréversible.
       </p>
       <label className="flex items-start gap-2 text-xs text-foreground">
         <input
           type="checkbox"
           checked={accepted}
           onChange={(e) => setAccepted(e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-current"
+          className="mt-0.5"
         />
-        <span>J'accepte ces conditions.</span>
+        <span>
+          J'ai compris que cette action est définitive. Je n'aurai plus de profil
+          au sein de Living Fellowship et je ne demanderai pas la récupération de
+          mes données.
+        </span>
       </label>
-      {err && <p className="text-xs text-destructive">{err}</p>}
-      <Button
-        variant="destructive"
-        disabled={!accepted || busy}
-        onClick={() => void submit()}
-      >
-        Supprimer définitivement mon compte
+      <Feedback err={err} msg={null} />
+      <Button variant="destructive" disabled={!accepted || busy} onClick={() => void submit()}>
+        Supprimer mon compte définitivement
       </Button>
     </div>
   );
 }
 
-
 function AdminManager() {
-  const fetchAdmins = listAdmins;
-  const doAdd = addAdmin;
-  const doRemove = removeAdmin;
+  const qc = useQueryClient();
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const admins = useQuery({ queryKey: ["admins"], queryFn: () => fetchAdmins() });
+
+  const admins = useQuery({
+    queryKey: ["admins-list"],
+    queryFn: listAdmins,
+  });
+
   const addMut = useMutation({
-    mutationFn: (v: string) => doAdd({ data: { email: v } }),
-    onSuccess: (r) => {
-      setMsg(`${r.email} est maintenant administrateur.`);
-      setErr(null);
+    mutationFn: addAdmin,
+    onSuccess: (res) => {
+      setMsg(res.message);
       setEmail("");
       void admins.refetch();
-    },
-    onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec de l'ajout."),
-  });
-  const removeMut = useMutation({
-    mutationFn: (userId: string) => doRemove({ data: { userId } }),
-    onSuccess: () => {
-      setMsg("Administrateur révoqué.");
-      void admins.refetch();
+      void qc.invalidateQueries({ queryKey: ["audit-log"] });
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec."),
   });
+
+  const removeMut = useMutation({
+    mutationFn: removeAdmin,
+    onSuccess: (res) => {
+      setMsg(res.message);
+      void admins.refetch();
+      void qc.invalidateQueries({ queryKey: ["audit-log"] });
+    },
+    onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec."),
+  });
+
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-4">
       <div className="space-y-1.5">
-        <Label htmlFor="a-email">Email du membre</Label>
-        <Input id="a-email" type="email" value={email} placeholder="membre@email.com" onChange={(e) => setEmail(e.target.value)} />
+        <Label htmlFor="adm-email">Email de l'utilisateur à nommer Admin</Label>
+        <div className="flex gap-2">
+          <Input
+            id="adm-email"
+            type="email"
+            placeholder="membre@livingfellowship.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <Button disabled={!email.includes("@") || addMut.isPending} onClick={() => { setErr(null); setMsg(null); addMut.mutate(email.trim()); }}>
+            {addMut.isPending ? "Ajout…" : "Ajouter comme Admin"}
+          </Button>
+        </div>
       </div>
       <Feedback err={err} msg={msg} />
-      <Button disabled={!email.includes("@") || addMut.isPending} onClick={() => { setErr(null); setMsg(null); addMut.mutate(email.trim()); }}>
-        {addMut.isPending ? "Ajout…" : "Ajouter comme Admin"}
-      </Button>
+
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        Administrateurs actuels ({admins.data?.length ?? 0})
+      </h3>
       <ul className="space-y-2">
         {(admins.data ?? []).map((a) => (
-          <li key={`${a.user_id}-${a.role}`} className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2">
-            <div className="min-w-0">
-              <p className="truncate text-sm text-foreground">{a.email}</p>
-              <p className="text-[0.68rem] uppercase tracking-wide text-primary">{a.role}</p>
+          <li key={a.id} className="flex items-center justify-between rounded-xl border border-border p-3 text-sm">
+            <div>
+              <p className="font-semibold text-foreground">{a.full_name || a.email}</p>
+              <p className="text-xs text-muted-foreground">{a.email}</p>
             </div>
-            {a.role === "admin" && (
+            {!a.is_ceo && (
               <Button size="sm" variant="outline" disabled={removeMut.isPending} onClick={() => removeMut.mutate(a.user_id)}>
-                Révoquer
+                Retirer Admin
               </Button>
             )}
           </li>
@@ -682,15 +719,32 @@ function ReviewRequests({ myId }: { myId: string }) {
     },
     onError: (e: unknown) => setErr(e instanceof Error ? e.message : "Échec."),
   });
+
+  // Dé-doublonnage : ne conserver qu'une seule demande en attente par utilisateur
+  const uniqueRequests = Array.from(
+    (reqs.data ?? []).reduce((map, item) => {
+      if (!map.has(item.user_id)) {
+        map.set(item.user_id, item);
+      } else {
+        // En cas de doublons en attente, conserver celle qui a le plus d'approbations
+        const existing = map.get(item.user_id)!;
+        if ((item.approvals_count ?? 0) > (existing.approvals_count ?? 0)) {
+          map.set(item.user_id, item);
+        }
+      }
+      return map;
+    }, new Map<string, NonNullable<typeof reqs.data>[number]>()).values(),
+  );
+
   if (reqs.isLoading) return <p className="text-xs text-muted-foreground">Chargement…</p>;
-  if (!reqs.data?.length) return <p className="text-xs text-muted-foreground">Aucune demande en attente.</p>;
+  if (!uniqueRequests.length) return <p className="text-xs text-muted-foreground">Aucune demande en attente.</p>;
   return (
     <div className="grid gap-3">
       <p className="text-xs text-muted-foreground">
         Il faut {REQUIRED_APPROVALS} validations d'administrateurs différents pour vérifier un compte.
       </p>
       {err && <p className="text-xs text-destructive">{err}</p>}
-      {reqs.data.map((r) => {
+      {uniqueRequests.map((r) => {
         const voted = myVotes.data?.get(r.id);
         const own = r.user_id === myId;
         return (
@@ -736,6 +790,80 @@ function ApprovalProgress({ approvals, refusals }: { approvals: number; refusals
         {approvals}/{REQUIRED_APPROVALS} validateurs
         {refusals > 0 ? ` · ${refusals} refus` : ""}
       </p>
+    </div>
+  );
+}
+
+function VerificationSection({
+  userId,
+  member,
+}: {
+  userId: string;
+  member: Member | null;
+}) {
+  const q = useQuery({
+    queryKey: ["my-verification-request", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("verification_requests")
+        .select("id,state,approvals_count,refusals_count,created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  if (member?.status === "Vérifié") {
+    return (
+      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-center">
+        <p className="text-sm font-semibold text-primary">Compte Vérifié</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Votre compte est déjà vérifié et actif au sein de Living Fellowship.
+        </p>
+      </div>
+    );
+  }
+
+  if (q.isLoading) {
+    return <p className="text-xs text-muted-foreground">Vérification du statut…</p>;
+  }
+
+  const req = q.data;
+
+  // Si une demande est en attente, n'afficher QUE le statut (pas de nouveau formulaire)
+  if (req && req.state === "En attente") {
+    return (
+      <div className="rounded-xl border border-border bg-muted/40 p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">
+            Demande en attente de validation
+          </p>
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+            En attente
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Votre demande de vérification est en cours d'examen par les administrateurs. Une seule demande est autorisée tant que celle-ci n'est pas traitée.
+        </p>
+        <ApprovalProgress approvals={req.approvals_count} refusals={req.refusals_count} />
+        <p className="mt-3 text-[0.7rem] text-muted-foreground">
+          Soumise le {new Date(req.created_at).toLocaleDateString("fr-FR")}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {req && req.state === "Refusée" && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          Votre précédente demande a été refusée ({req.refusals_count} avis défavorables). Vous pouvez soumettre une nouvelle demande ci-dessous.
+        </div>
+      )}
+      <VerifyForm userId={userId} member={member} onSubmitted={() => void q.refetch()} />
     </div>
   );
 }
