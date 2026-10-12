@@ -48,11 +48,15 @@ function ProfilComponent() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [sponsorInput, setSponsorInput] = useState("");
+  const [savingSponsor, setSavingSponsor] = useState(false);
+  const [sponsorErr, setSponsorErr] = useState<string | null>(null);
+  const [sponsorOk, setSponsorOk] = useState<string | null>(null);
+
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [viewer, setViewer] = useState(false);
-
 
   const { data: member } = useQuery({
     queryKey: ["my-member", user?.id],
@@ -61,7 +65,7 @@ function ProfilComponent() {
       const { data, error } = await supabase
         .from("members")
         .select(
-          "id,user_id,first_name,last_name,avatar_url,serial,status,created_at",
+          "id,user_id,first_name,last_name,avatar_url,serial,status,created_at,referred_by",
         )
         .eq("user_id", user!.id)
         .maybeSingle();
@@ -78,6 +82,18 @@ function ProfilComponent() {
     }
   }, [member]);
 
+  // Si l'utilisateur n'a pas encore de parrain, vérifier si un code est stocké en localStorage
+  useEffect(() => {
+    if (member && !member.referred_by && typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("lf_ref");
+        if (stored && !sponsorInput) {
+          setSponsorInput(stored);
+        }
+      } catch {}
+    }
+  }, [member]);
+
   const saveRow = async (patch: Partial<Member>) => {
     if (!user) return null;
     const { data, error } = await supabase
@@ -87,7 +103,7 @@ function ProfilComponent() {
         { onConflict: "user_id" },
       )
       .select(
-        "id,user_id,first_name,last_name,avatar_url,serial,status,created_at",
+        "id,user_id,first_name,last_name,avatar_url,serial,status,created_at,referred_by",
       )
       .single();
     if (error) throw error;
@@ -126,10 +142,28 @@ function ProfilComponent() {
     setErr(null);
     setMsg(null);
     try {
-      const saved = await saveRow({
+      const pendingRef =
+        (typeof window !== "undefined" && localStorage.getItem("lf_ref")) ||
+        user?.user_metadata?.referred_by ||
+        null;
+
+      const patch: Partial<Member> = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-      });
+      };
+
+      if (!member?.referred_by && pendingRef) {
+        patch.referred_by = String(pendingRef).trim().toUpperCase();
+      }
+
+      const saved = await saveRow(patch);
+
+      if (pendingRef) {
+        try {
+          localStorage.removeItem("lf_ref");
+        } catch {}
+      }
+
       setMsg(
         saved?.serial
           ? `Inscription confirmée. Votre Serial Number est ${saved.serial}.`
@@ -139,6 +173,39 @@ function ProfilComponent() {
       setErr(e instanceof Error ? e.message : "Échec de l'enregistrement.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleSaveSponsor = async () => {
+    if (!user || !sponsorInput.trim()) return;
+    setSavingSponsor(true);
+    setSponsorErr(null);
+    setSponsorOk(null);
+    const code = sponsorInput.trim().toUpperCase();
+    try {
+      if (member?.serial && member.serial.toUpperCase() === code) {
+        throw new Error("Vous ne pouvez pas vous parrainer vous-même.");
+      }
+      const { data: sponsor, error: sErr } = await supabase
+        .from("members")
+        .select("serial,status,first_name,last_name")
+        .eq("serial", code)
+        .maybeSingle();
+
+      if (sErr) throw sErr;
+      if (!sponsor) {
+        throw new Error(`Aucun membre trouvé avec le Serial ${code}.`);
+      }
+
+      await saveRow({ referred_by: code });
+      try {
+        localStorage.removeItem("lf_ref");
+      } catch {}
+      setSponsorOk(`Parrain lié avec succès : ${code} (${sponsor.first_name} ${sponsor.last_name}).`);
+    } catch (e: unknown) {
+      setSponsorErr(e instanceof Error ? e.message : "Erreur lors de la liaison du parrain.");
+    } finally {
+      setSavingSponsor(false);
     }
   };
 
@@ -199,7 +266,6 @@ function ProfilComponent() {
             <Button asChild variant="outline" className="mt-3 w-full">
               <Link to="/parametres">Paramètres</Link>
             </Button>
-
           </div>
         ) : (
           <div className="mt-4">
@@ -254,6 +320,14 @@ function ProfilComponent() {
                 </span>
               </div>
 
+              {/* Parrain lié */}
+              {member?.referred_by && (
+                <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
+                  <span>Parrainé par :</span>
+                  <span className="font-mono font-bold">{member.referred_by}</span>
+                </div>
+              )}
+
               <Button
                 type="button"
                 variant="outline"
@@ -272,9 +346,6 @@ function ProfilComponent() {
                   CEO — Gérer les admins
                 </Button>
               )}
-
-
-
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -311,7 +382,39 @@ function ProfilComponent() {
                 : "Confirmer mon nom et prénom"}
             </Button>
 
-            <p className="mt-2 text-center text-[0.7rem] text-muted-foreground">
+            {/* Rappel parrainage non conditionnel */}
+            {member && !member.referred_by && (
+              <div className="mt-5 rounded-2xl border border-dashed border-border bg-card/60 p-4 text-left">
+                <p className="text-xs font-semibold text-foreground">
+                  Avez-vous été invité par un membre ? (Optionnel)
+                </p>
+                <p className="mt-1 text-[0.75rem] text-muted-foreground">
+                  Si un membre vous a recommandé Living Fellowship, renseignez son Serial Number officiel ci-dessous.
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <Input
+                    value={sponsorInput}
+                    onChange={(e) => setSponsorInput(e.target.value.toUpperCase())}
+                    placeholder="LF-XXXX"
+                    className="h-9 max-w-[140px] font-mono text-xs uppercase"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 text-xs"
+                    disabled={savingSponsor || !sponsorInput.trim()}
+                    onClick={() => void handleSaveSponsor()}
+                  >
+                    {savingSponsor ? "Vérification…" : "Associer le parrain"}
+                  </Button>
+                </div>
+                {sponsorErr && <p className="mt-2 text-xs text-destructive">{sponsorErr}</p>}
+                {sponsorOk && <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">{sponsorOk}</p>}
+              </div>
+            )}
+
+            <p className="mt-3 text-center text-[0.7rem] text-muted-foreground">
               La vérification du membre est une étape à suivre bientôt : votre
               statut reste « Non Vérifié ».
             </p>
