@@ -9,6 +9,7 @@ export interface Member {
   serial: string | null;
   status: string;
   created_at: string;
+  referred_by?: string | null;
 }
 
 export function fullName(m: Pick<Member, "first_name" | "last_name">) {
