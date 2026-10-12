@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
@@ -33,10 +33,29 @@ function AuthComponent() {
   const [mode, setMode] = useState<"signin" | "signup">("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [refCode, setRefCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlRef = params.get("ref");
+      if (urlRef) {
+        const clean = urlRef.trim().toUpperCase();
+        setRefCode(clean);
+        localStorage.setItem("lf_ref", clean);
+      } else {
+        const saved = localStorage.getItem("lf_ref");
+        if (saved) setRefCode(saved);
+      }
+    } catch {
+      // stockage local indisponible
+    }
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,10 +64,19 @@ function AuthComponent() {
     setMsg(null);
     try {
       if (mode === "signup") {
+        const cleanRef = refCode.trim().toUpperCase();
+        if (cleanRef) {
+          try {
+            localStorage.setItem("lf_ref", cleanRef);
+          } catch {}
+        }
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin },
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: cleanRef ? { referred_by: cleanRef } : undefined,
+          },
         });
         if (error) throw error;
         if (data.session) navigate({ to: "/profil" });
@@ -70,6 +98,12 @@ function AuthComponent() {
 
   const google = async () => {
     setErr(null);
+    const cleanRef = refCode.trim().toUpperCase();
+    if (cleanRef) {
+      try {
+        localStorage.setItem("lf_ref", cleanRef);
+      } catch {}
+    }
     try {
       await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin,
@@ -156,6 +190,35 @@ function AuthComponent() {
             </button>
           </div>
         </div>
+
+        {mode === "signup" && (
+          <div className="space-y-1.5">
+            <Label htmlFor="refCode" className="flex items-center justify-between text-xs">
+              <span>Code parrain (Serial Number)</span>
+              <span className="text-muted-foreground font-normal">Optionnel</span>
+            </Label>
+            <Input
+              id="refCode"
+              type="text"
+              value={refCode}
+              onChange={(e) => {
+                const clean = e.target.value.toUpperCase();
+                setRefCode(clean);
+                try {
+                  if (clean.trim()) localStorage.setItem("lf_ref", clean.trim());
+                  else localStorage.removeItem("lf_ref");
+                } catch {}
+              }}
+              placeholder="Ex : LF-0001"
+              className="font-mono text-xs uppercase"
+            />
+            {refCode.trim() && (
+              <p className="text-[0.72rem] text-primary">
+                ✓ Parrain pris en compte : <span className="font-mono font-semibold">{refCode.trim().toUpperCase()}</span>
+              </p>
+            )}
+          </div>
+        )}
 
         {err && <p className="text-xs text-destructive">{err}</p>}
         {msg && <p className="text-xs text-accent">{msg}</p>}
