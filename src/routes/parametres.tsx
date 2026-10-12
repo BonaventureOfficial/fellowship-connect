@@ -1002,6 +1002,77 @@ function MyFellowshipSection({
       <div className="rounded-lg bg-muted/50 p-2.5 text-[0.72rem] text-muted-foreground">
         💡 Astuce : Vous pouvez aussi communiquer simplement votre Serial <span className="font-semibold text-foreground">{serial}</span> pour qu'il soit saisi lors de l'inscription ou ajouté plus tard sur le profil.
       </div>
+
+      {serial && <MyFellowshipReferrals serial={serial} />}
+    </div>
+  );
+}
+
+function MyFellowshipReferrals({ serial }: { serial: string }) {
+  const { data: referrals, isLoading } = useQuery({
+    queryKey: ["my-referrals", serial],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("members")
+        .select("id,first_name,last_name,serial,status,created_at")
+        .eq("referred_by", serial)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        first_name: string;
+        last_name: string;
+        serial: string | null;
+        status: string;
+        created_at: string;
+      }>;
+    },
+  });
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Membres parrainés ({referrals ? referrals.length : 0})
+        </h3>
+        {referrals && referrals.length > 0 && (
+          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[0.7rem] font-bold text-primary">
+            {referrals.length} {referrals.length > 1 ? "filleuls" : "filleul"}
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <p className="mt-2 text-xs text-muted-foreground">Chargement des parrainages…</p>
+      ) : !referrals || referrals.length === 0 ? (
+        <p className="mt-2 rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+          Aucun membre n'a encore utilisé votre lien ou votre Serial. Dès qu'un membre s'inscrit avec votre code, il apparaîtra ici.
+        </p>
+      ) : (
+        <div className="mt-2.5 divide-y divide-border/60 rounded-xl border border-border bg-card/60">
+          {referrals.map((r) => (
+            <div key={r.id} className="flex items-center justify-between p-3 text-xs">
+              <div>
+                <p className="font-semibold text-foreground">
+                  {r.first_name} {r.last_name}
+                </p>
+                <p className="font-mono text-[0.7rem] text-muted-foreground">
+                  {r.serial ?? "Serial en attente"} · {new Date(r.created_at).toLocaleDateString("fr-FR")}
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${
+                  r.status === "Vérifié"
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {r.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
