@@ -44,7 +44,7 @@ const FONCTIONS = [
   "Membre",
 ];
 
-type Panel = "admins" | "review" | "log" | "verify" | "email" | "password" | "delete" | null;
+type Panel = "admins" | "review" | "log" | "my-fellowship" | "verify" | "email" | "password" | "delete" | null;
 
 function ParametresComponent() {
   const { user, loading } = useAuth();
@@ -119,6 +119,24 @@ function ParametresComponent() {
               <AuditLog />
             </SettingItem>
           )}
+          <SettingItem
+            title="My Fellowship"
+            subtitle={
+              member?.status === "Vérifié"
+                ? "Parrainez des membres avec votre Serial Number"
+                : "Vérification requise pour parrainer"
+            }
+            open={panel === "my-fellowship"}
+            onToggle={() =>
+              setPanel(panel === "my-fellowship" ? null : "my-fellowship")
+            }
+          >
+            <MyFellowshipSection
+              member={member ?? null}
+              onGoToVerify={() => setPanel("verify")}
+            />
+          </SettingItem>
+
           <SettingItem
             title="Vérifier Votre Compte"
             subtitle={
@@ -790,6 +808,200 @@ function ApprovalProgress({ approvals, refusals }: { approvals: number; refusals
         {approvals}/{REQUIRED_APPROVALS} validateurs
         {refusals > 0 ? ` · ${refusals} refus` : ""}
       </p>
+    </div>
+  );
+}
+
+function MyFellowshipSection({
+  member,
+  onGoToVerify,
+}: {
+  member: Member | null;
+  onGoToVerify: () => void;
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedSerial, setCopiedSerial] = useState(false);
+
+  const isVerified = member?.status === "Vérifié";
+  const serial = member?.serial;
+
+  const origin =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://livingfellowship2026.com";
+
+  const referralUrl = serial
+    ? `${origin}/auth?ref=${encodeURIComponent(serial)}`
+    : "";
+
+  const handleCopyLink = async () => {
+    if (!referralUrl) return;
+    try {
+      await navigator.clipboard.writeText(referralUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2500);
+    } catch {
+      // presse-papier non accessible
+    }
+  };
+
+  const handleCopySerial = async () => {
+    if (!serial) return;
+    try {
+      await navigator.clipboard.writeText(serial);
+      setCopiedSerial(true);
+      setTimeout(() => setCopiedSerial(false), 2500);
+    } catch {
+      // presse-papier non accessible
+    }
+  };
+
+  const handleShare = async () => {
+    if (!referralUrl) return;
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: "Rejoignez Living Fellowship",
+          text: `Rejoignez Living Fellowship avec mon Serial Number (${serial}) !`,
+          url: referralUrl,
+        });
+      } catch {
+        // annulation du partage
+      }
+    } else {
+      void handleCopyLink();
+    }
+  };
+
+  if (!isVerified) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-500">
+            Éligibilité au parrainage
+          </p>
+          <p className="mt-1 text-sm font-medium text-foreground">
+            Statut actuel : {member?.status ?? "Non Vérifié"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Seuls les membres ayant obtenu le badge de vérification officiel peuvent parrainer de nouveaux membres au sein de Living Fellowship.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={onGoToVerify}
+          >
+            Faire une demande de vérification
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!confirmed) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+              ✓ Compte Vérifié — Éligible
+            </span>
+            {serial && (
+              <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[0.7rem] font-bold text-primary">
+                {serial}
+              </span>
+            )}
+          </div>
+          <p className="mt-2 text-sm font-medium text-foreground">
+            Votre badge de vérification est actif. Vous êtes éligible pour parrainer et inviter de nouveaux membres.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            En confirmant, le système génère votre lien unique de parrainage rattaché à votre Serial Number officiel.
+          </p>
+        </div>
+
+        <Button
+          type="button"
+          className="w-full"
+          disabled={!serial}
+          onClick={() => setConfirmed(true)}
+        >
+          {serial
+            ? "Confirmer et afficher mon lien de parrainage"
+            : "Attribution du Serial en cours…"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+            ✓ Parrain officiel Living Fellowship
+          </span>
+          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-700 dark:text-emerald-300">
+            {serial}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Votre lien de parrainage est actif. Tout membre qui s’inscrit avec ce lien aura votre Serial Number automatiquement associé.
+        </p>
+      </div>
+
+      <div>
+        <Label className="text-xs font-medium text-muted-foreground">
+          Lien de parrainage personnalisé
+        </Label>
+        <div className="mt-1.5 flex gap-2">
+          <Input
+            type="text"
+            readOnly
+            value={referralUrl}
+            className="font-mono text-xs"
+            onClick={(e) => (e.target as HTMLInputElement).select()}
+          />
+          <Button
+            type="button"
+            variant={copiedLink ? "secondary" : "default"}
+            size="sm"
+            onClick={handleCopyLink}
+          >
+            {copiedLink ? "Copié !" : "Copier"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleCopySerial}
+        >
+          {copiedSerial ? "Serial copié !" : `Copier Serial (${serial})`}
+        </Button>
+
+        {typeof navigator !== "undefined" &&
+          typeof navigator.share === "function" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleShare}
+            >
+              Partager…
+            </Button>
+          )}
+      </div>
+
+      <div className="rounded-lg bg-muted/50 p-2.5 text-[0.72rem] text-muted-foreground">
+        💡 Astuce : Vous pouvez aussi communiquer simplement votre Serial <span className="font-semibold text-foreground">{serial}</span> pour qu'il soit saisi lors de l'inscription ou ajouté plus tard sur le profil.
+      </div>
     </div>
   );
 }
