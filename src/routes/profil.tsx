@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { AvatarViewer } from "@/components/AvatarViewer";
 import { VerificationBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
+import { useFollowCounts } from "@/lib/follows";
 import { lfLogo } from "@/lib/assets";
 import { lfMembers } from "@/lib/assets";
 import { lfCover } from "@/lib/assets";
@@ -58,6 +59,8 @@ function ProfilComponent() {
   const [err, setErr] = useState<string | null>(null);
   const [viewer, setViewer] = useState(false);
 
+  const { data: followCounts } = useFollowCounts(user?.id);
+
   const { data: member } = useQuery({
     queryKey: ["my-member", user?.id],
     enabled: !!user,
@@ -82,7 +85,6 @@ function ProfilComponent() {
     }
   }, [member]);
 
-  // Si l'utilisateur n'a pas encore de parrain, vérifier si un code est stocké en localStorage
   useEffect(() => {
     if (member && !member.referred_by && typeof window !== "undefined") {
       try {
@@ -122,79 +124,81 @@ function ProfilComponent() {
       const path = `${user.id}/avatar-${Date.now()}.${ext}`;
       const { error: upErr } = await supabase.storage
         .from("avatars")
-        .upload(path, file, { upsert: true, contentType: file.type });
+        .upload(path, file, { upsert: true });
       if (upErr) throw upErr;
-      const { data: signed, error: sErr } = await supabase.storage
+
+      const { data: signData, error: signErr } = await supabase.storage
         .from("avatars")
         .createSignedUrl(path, SIGNED_URL_TTL);
-      if (sErr) throw sErr;
-      await saveRow({ avatar_url: signed.signedUrl });
-      setMsg("Photo de profil mise à jour.");
+      if (signErr) throw signErr;
+
+      await saveRow({ avatar_url: signData.signedUrl });
+      setMsg("Photo mise à jour avec succès.");
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Échec de l'envoi de la photo.");
+      setErr(
+        e instanceof Error
+          ? e.message
+          : "Erreur lors du téléchargement de la photo.",
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  const confirmIdentity = async () => {
+  const onSaveIdentity = async () => {
+    if (!user) return;
+    const f = firstName.trim();
+    const l = lastName.trim();
+    if (f.length < 2 || l.length < 2) {
+      setErr("Le prénom et le nom doivent comporter au moins 2 caractères.");
+      return;
+    }
     setBusy(true);
     setErr(null);
     setMsg(null);
     try {
-      const pendingRef =
-        (typeof window !== "undefined" && localStorage.getItem("lf_ref")) ||
-        user?.user_metadata?.referred_by ||
-        null;
-
-      const patch: Partial<Member> = {
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-      };
-
-      if (!member?.referred_by && pendingRef) {
-        patch.referred_by = String(pendingRef).trim().toUpperCase();
+      const updated = await saveRow({ first_name: f, last_name: l });
+      if (updated?.serial) {
+        setMsg(`Identité enregistrée. Votre Serial Number : ${updated.serial}`);
+      } else {
+        setMsg("Identité enregistrée.");
       }
-
-      const saved = await saveRow(patch);
-
-      if (pendingRef) {
-        try {
-          localStorage.removeItem("lf_ref");
-        } catch {}
-      }
-
-      setMsg(
-        saved?.serial
-          ? `Inscription confirmée. Votre Serial Number est ${saved.serial}.`
-          : "Enregistré.",
-      );
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Échec de l'enregistrement.");
+      setErr(
+        e instanceof Error
+          ? e.message
+          : "Erreur lors de l'enregistrement de votre identité.",
+      );
     } finally {
       setBusy(false);
     }
   };
 
-  const handleSaveSponsor = async () => {
-    if (!user || !sponsorInput.trim()) return;
+  const onLinkSponsor = async () => {
+    if (!user || !member) return;
+    const code = sponsorInput.trim().toUpperCase();
+    if (!code) {
+      setSponsorErr("Veuillez saisir un code Serial (ex. LF-0002).");
+      return;
+    }
+    if (member.serial && code === member.serial.toUpperCase()) {
+      setSponsorErr("Vous ne pouvez pas vous parrainer vous-même.");
+      return;
+    }
     setSavingSponsor(true);
     setSponsorErr(null);
     setSponsorOk(null);
-    const code = sponsorInput.trim().toUpperCase();
     try {
-      if (member?.serial && member.serial.toUpperCase() === code) {
-        throw new Error("Vous ne pouvez pas vous parrainer vous-même.");
-      }
-      const { data: sponsor, error: sErr } = await supabase
+      const { data: sponsor, error: spErr } = await supabase
         .from("members")
-        .select("serial,status,first_name,last_name")
-        .eq("serial", code)
+        .select("id,serial,first_name,last_name,status")
+        .ilike("serial", code)
         .maybeSingle();
 
-      if (sErr) throw sErr;
+      if (spErr) throw spErr;
       if (!sponsor) {
-        throw new Error(`Aucun membre trouvé avec le Serial ${code}.`);
+        setSponsorErr(`Aucun membre trouvé avec le Serial ${code}.`);
+        return;
       }
 
       await saveRow({ referred_by: code });
@@ -320,6 +324,27 @@ function ProfilComponent() {
                 </span>
               </div>
 
+              {/* Compteurs dynamiques Followers & Abonnements */}
+              <div className="mt-3 flex items-center justify-center gap-6 rounded-2xl border border-border/80 bg-background/60 px-5 py-2.5 text-xs">
+                <div className="text-center">
+                  <p className="text-base font-bold text-foreground">
+                    {followCounts ? followCounts.followersCount : 0}
+                  </p>
+                  <p className="text-[0.7rem] uppercase tracking-wider text-muted-foreground">
+                    Followers
+                  </p>
+                </div>
+                <div className="h-6 w-px bg-border" />
+                <div className="text-center">
+                  <p className="text-base font-bold text-foreground">
+                    {followCounts ? followCounts.followingCount : 0}
+                  </p>
+                  <p className="text-[0.7rem] uppercase tracking-wider text-muted-foreground">
+                    Abonnements
+                  </p>
+                </div>
+              </div>
+
               {/* Parrain lié */}
               {member?.referred_by && (
                 <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
@@ -340,137 +365,137 @@ function ProfilComponent() {
               {isCeo && (
                 <Button
                   type="button"
-                  className="mt-3 w-full"
+                  variant="secondary"
+                  className="mt-3 w-full font-semibold uppercase tracking-wider"
                   onClick={() => void navigate({ to: "/ceo" })}
                 >
-                  CEO — Gérer les admins
+                  Espace CEO
                 </Button>
               )}
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="firstName">Prénom</Label>
+            {/* Formulaire identité */}
+            <div className="mt-6 space-y-3">
+              <div>
+                <Label htmlFor="first_name">Prénom</Label>
                 <Input
-                  id="firstName"
+                  id="first_name"
                   value={firstName}
+                  disabled={busy}
                   onChange={(e) => setFirstName(e.target.value)}
-                  placeholder="Prénom"
+                  placeholder="Ex : Bonaventure"
+                  className="mt-1"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="lastName">Nom</Label>
+              <div>
+                <Label htmlFor="last_name">Nom</Label>
                 <Input
-                  id="lastName"
+                  id="last_name"
                   value={lastName}
+                  disabled={busy}
                   onChange={(e) => setLastName(e.target.value)}
-                  placeholder="Nom"
+                  placeholder="Ex : Tuyisenge"
+                  className="mt-1"
                 />
               </div>
+
+              {msg && <p className="text-xs text-primary">{msg}</p>}
+              {err && <p className="text-xs text-destructive">{err}</p>}
+
+              <Button
+                className="w-full"
+                disabled={!canConfirm}
+                onClick={onSaveIdentity}
+              >
+                {busy
+                  ? "Enregistrement…"
+                  : member?.serial
+                    ? "Mettre à jour mon identité"
+                    : "Confirmer mon identité et générer mon Serial"}
+              </Button>
             </div>
 
-            {err && <p className="mt-3 text-xs text-destructive">{err}</p>}
-            {msg && <p className="mt-3 text-xs text-accent">{msg}</p>}
-
-            <Button
-              className="mt-4 w-full"
-              disabled={!canConfirm}
-              onClick={() => void confirmIdentity()}
-            >
-              {member?.serial
-                ? "Mettre à jour mon nom et prénom"
-                : "Confirmer mon nom et prénom"}
-            </Button>
-
-            {/* Rappel parrainage non conditionnel */}
-            {member && !member.referred_by && (
-              <div className="mt-5 rounded-2xl border border-dashed border-border bg-card/60 p-4 text-left">
+            {/* Section ajout d'un parrain (si absent) */}
+            {!member?.referred_by && (
+              <div className="mt-6 rounded-xl border border-dashed border-border p-4 bg-muted/20">
                 <p className="text-xs font-semibold text-foreground">
-                  Avez-vous été invité par un membre ? (Optionnel)
+                  Avez-vous un parrain Living Fellowship ?
                 </p>
                 <p className="mt-1 text-[0.75rem] text-muted-foreground">
-                  Si un membre vous a recommandé Living Fellowship, renseignez son Serial Number officiel ci-dessous.
+                  Si un membre vous a invité, entrez son Serial Number (ex : LF-0002).
                 </p>
-                <div className="mt-3 flex items-center gap-2">
+
+                <div className="mt-3 flex gap-2">
                   <Input
+                    placeholder="LF-0000"
                     value={sponsorInput}
+                    disabled={savingSponsor}
                     onChange={(e) => setSponsorInput(e.target.value.toUpperCase())}
-                    placeholder="LF-XXXX"
-                    className="h-9 max-w-[140px] font-mono text-xs uppercase"
+                    className="font-mono text-xs uppercase"
                   />
                   <Button
-                    type="button"
                     size="sm"
-                    variant="outline"
-                    className="h-9 text-xs"
                     disabled={savingSponsor || !sponsorInput.trim()}
-                    onClick={() => void handleSaveSponsor()}
+                    onClick={onLinkSponsor}
                   >
-                    {savingSponsor ? "Vérification…" : "Associer le parrain"}
+                    {savingSponsor ? "…" : "Lier"}
                   </Button>
                 </div>
+
+                {sponsorOk && <p className="mt-2 text-xs text-primary">{sponsorOk}</p>}
                 {sponsorErr && <p className="mt-2 text-xs text-destructive">{sponsorErr}</p>}
-                {sponsorOk && <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">{sponsorOk}</p>}
               </div>
             )}
 
-            <p className="mt-3 text-center text-[0.7rem] text-muted-foreground">
-              La vérification du membre est une étape à suivre bientôt : votre
-              statut reste « Non Vérifié ».
-            </p>
-
-            <button
-              type="button"
-              onClick={() => void signOut()}
-              className="mt-4 w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
+            <Button
+              variant="destructive"
+              className="mt-6 w-full"
+              onClick={signOut}
             >
               Se déconnecter
-            </button>
-
-            <AvatarViewer
-              open={viewer}
-              onOpenChange={setViewer}
-              src={avatarSrc}
-              name={displayName || "Mon profil"}
-              serial={member?.serial ?? null}
-            />
+            </Button>
           </div>
         )}
       </section>
 
-      {/* À propos */}
-      <section className="mt-4 rounded-2xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">À propos</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Living Fellowship rassemble ses membres autour de trois piliers : la
-          personnalité, la potentialité et la prosperité. Nous accompagnons
-          chaque membre dans son épanouissement personnel et collectif.
+      {/* Vision */}
+      <section className="mt-6 rounded-2xl border border-border bg-card p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Notre devise
+        </h3>
+        <p className="mt-2 text-sm leading-relaxed text-foreground">
+          Living Fellowship rassemble les membres autour d'une vision commune :
+          développer la <strong>Personnalité</strong>, libérer la{" "}
+          <strong>Potentialité</strong> et marcher vers la{" "}
+          <strong>Prospérité</strong>.
         </p>
       </section>
 
-      {/* Image de couverture */}
-      <section className="mt-4 overflow-hidden rounded-2xl border border-border">
-        <img
-          src={lfCover.url}
-          alt="Living Fellowship"
-          className="w-full object-cover"
-        />
+      {/* Contact */}
+      <section className="mt-6 mb-12 rounded-2xl border border-border bg-card p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Contact & Support
+        </h3>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Une question sur votre adhésion ou vos droits d'accès ? Contactez
+          l'administration Living Fellowship à{" "}
+          <a
+            href="mailto:contact@livingfellowship.org"
+            className="text-primary hover:underline"
+          >
+            contact@livingfellowship.org
+          </a>
+          .
+        </p>
       </section>
 
-      {/* Coordonnées */}
-      <section className="mt-4 rounded-2xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">Contact</h2>
-        <dl className="mt-2 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">Siège</dt>
-            <dd className="text-foreground">Burundi-Bujumbura</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-muted-foreground">Email</dt>
-            <dd className="text-foreground">livingfellowship2024@gmail.com</dd>
-          </div>
-        </dl>
-      </section>
+      <AvatarViewer
+        open={viewer}
+        onOpenChange={setViewer}
+        src={avatarSrc}
+        name={displayName || "Photo"}
+        serial={member?.serial}
+      />
     </main>
   );
 }
