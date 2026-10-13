@@ -2,6 +2,8 @@ import { useAvatarUrl } from "@/lib/useAvatarUrl";
 import { useState } from "react";
 import { AvatarViewer } from "@/components/AvatarViewer";
 import { VerificationBadge } from "@/components/PlatinumBadge";
+import { FollowButton } from "@/components/FollowButton";
+import { useFollowCounts } from "@/lib/follows";
 import { fullName, initialsOf, type Member } from "@/lib/members";
 import type { AppRole } from "@/lib/roles";
 
@@ -19,6 +21,7 @@ export function MemberCard({
   const verified = member.status === "Vérifié";
   const name = fullName(member) || "Membre";
 
+  const { data: followCounts } = useFollowCounts(member.user_id);
 
   return (
     <article className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
@@ -44,13 +47,36 @@ export function MemberCard({
 
       {/* Infos */}
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate text-sm font-semibold text-foreground">{name}</p>
-          <VerificationBadge isCeo={isCeo} verified={verified} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 truncate">
+            <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+            <VerificationBadge isCeo={isCeo} verified={verified} />
+          </div>
+          {/* Bouton Follow / Unfollow */}
+          <FollowButton targetMember={member} />
         </div>
+
         <p className="mt-1 font-mono text-[0.72rem] tracking-wide text-muted-foreground">
           {member.serial ?? "LF-…"}
         </p>
+
+        {/* Compteurs dynamiques Followers / Following */}
+        <div className="mt-1.5 flex items-center gap-3 text-[0.72rem] text-muted-foreground">
+          <span>
+            <strong className="font-semibold text-foreground">
+              {followCounts ? followCounts.followersCount : 0}
+            </strong>{" "}
+            followers
+          </span>
+          <span>·</span>
+          <span>
+            <strong className="font-semibold text-foreground">
+              {followCounts ? followCounts.followingCount : 0}
+            </strong>{" "}
+            abonnements
+          </span>
+        </div>
+
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
@@ -71,7 +97,6 @@ export function MemberCard({
           )}
         </div>
       </div>
-
 
       <AvatarViewer
         open={open}
