@@ -1008,6 +1008,128 @@ function MyFellowshipSection({
   );
 }
 
+const REFERRALS_PAGE_SIZE = 25;
+
+type ReferralMember = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  serial: string | null;
+  status: string;
+  created_at: string;
+};
+
+function MyFellowshipReferrals({ serial }: { serial: string }) {
+  const [page, setPage] = useState(0);
+  const from = page * REFERRALS_PAGE_SIZE;
+  const to = from + REFERRALS_PAGE_SIZE - 1;
+
+  const {
+    data: totalCount = 0,
+    isLoading: isCountLoading,
+    error: countError,
+  } = useQuery({
+    queryKey: ["my-referrals-count", serial],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("members")
+        .select("id", { count: "exact", head: true })
+        .eq("referred_by", serial);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const {
+    data: referrals = [],
+    isLoading: isPageLoading,
+    error: pageError,
+  } = useQuery({
+    queryKey: ["my-referrals-page", serial, page],
+    queryFn: async (): Promise<ReferralMember[]> => {
+      const { data, error } = await supabase
+        .from("members")
+        .select("id,first_name,last_name,serial,status,created_at")
+        .eq("referred_by", serial)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, to);
+      if (error) throw error;
+      return (data ?? []) as ReferralMember[];
+    },
+  });
+
+  const pageCount = Math.ceil(totalCount / REFERRALS_PAGE_SIZE);
+  const firstItem = totalCount === 0 ? 0 : from + 1;
+  const lastItem = Math.min(to + 1, totalCount);
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Membres parrainés
+        </h3>
+        <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[0.7rem] font-bold text-primary">
+          {isCountLoading ? "Comptage…" : `${totalCount} ${totalCount > 1 ? "filleuls" : "filleul"}`}
+        </span>
+      </div>
+
+      {(countError || pageError) && (
+        <p className="mt-2 text-xs text-destructive">
+          Impossible de charger les parrainages. Réessayez dans un instant.
+        </p>
+      )}
+
+      {isPageLoading ? (
+        <p className="mt-2 text-xs text-muted-foreground">Chargement de cette page…</p>
+      ) : totalCount === 0 ? (
+        <p className="mt-2 rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+          Aucun membre n'a encore utilisé votre lien ou votre Serial. Dès qu'un membre s'inscrit avec votre code, il apparaîtra ici.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Affichage de {firstItem} à {lastItem} sur {totalCount}
+          </p>
+          <div className="mt-2.5 divide-y divide-border/60 rounded-xl border border-border bg-card/60">
+            {referrals.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-3 p-3 text-xs">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-foreground">
+                    {r.first_name} {r.last_name}
+                  </p>
+                  <p className="font-mono text-[0.7rem] text-muted-foreground">
+                    {r.serial ?? "Serial en attente"} · {new Date(r.created_at).toLocaleDateString("fr-FR")}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold ${
+                    r.status === "Vérifié"
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {r.status}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {pageCount > 1 && (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page === 0 || isPageLoading}
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+              >
+                Précédent
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {page + 1} sur {pageCount}
+              </span>
+              <Button
                 type="button"
                 variant="outline"
                 size="sm"
