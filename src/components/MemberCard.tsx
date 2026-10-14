@@ -5,10 +5,11 @@ import { PlatinumBadge } from "@/components/PlatinumBadge";
 import { FollowButton } from "@/components/FollowButton";
 import { useFollowCounts } from "@/lib/follows";
 import { fullName, initialsOf, type Member } from "@/lib/members";
-import type { AppRole } from "@/lib/roles";
+import { useRolesMap, type AppRole } from "@/lib/roles";
 
 export function MemberCard({
   member,
+  roles,
 }: {
   member: Member;
   roles?: AppRole[];
@@ -18,11 +19,16 @@ export function MemberCard({
   const verified = member.status === "Vérifié";
   const name = fullName(member) || "Membre";
 
+  // Récupération automatique du rôle pour attribuer le bon badge
+  const { rolesMap } = useRolesMap();
+  const effectiveRoles = roles ?? (member.user_id ? rolesMap.get(member.user_id) ?? [] : []);
+  const isCeo = effectiveRoles.includes("ceo");
+
   const { data: followCounts } = useFollowCounts(member.user_id);
 
   return (
     <article className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
-      {/* Avatar avec contour dégradé média orange/jaune */}
+      {/* Avatar avec contour dégradé */}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -47,8 +53,13 @@ export function MemberCard({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 truncate">
             <p className="truncate text-sm font-semibold text-foreground">{name}</p>
-            {/* Même coche de vérification officielle pour tous les vérifiés */}
-            {verified && <PlatinumBadge className="h-4 w-4" variant="blue" />}
+            {/* Badge officiel : Platinum pour le CEO, Bleu pour les membres vérifiés */}
+            {verified && (
+              <PlatinumBadge
+                className="h-4 w-4"
+                variant={isCeo ? "platinum" : "blue"}
+              />
+            )}
           </div>
           {/* Bouton Suivre / Abonné */}
           <FollowButton targetMember={member} />
@@ -75,7 +86,7 @@ export function MemberCard({
           </span>
         </div>
 
-        {/* Statut officiel uniquement (sans badge CEO/Admin) */}
+        {/* Statut officiel uniquement (sans étiquette textuelle CEO/Admin) */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
