@@ -17,13 +17,12 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Accueil Living Fellowship : plateforme média, devises Personalité, Potentialité, Prospérité et communauté des membres.",
+          "Accueil Living Fellowship : plateforme média et communauté des membres.",
       },
       { property: "og:title", content: "Living Fellowship — Plateforme Média" },
       {
         property: "og:description",
-        content:
-          "Personalité, Potentialité, Prospérité — découvrez les médias et membres de Living Fellowship.",
+        content: "Plateforme média et communauté de Living Fellowship.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -48,14 +47,14 @@ function HomeComponent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLightMode, setIsLightMode] = useState(false);
 
-  // Splash screen initial
+  // Splash initial
   useEffect(() => {
     if (typeof window === "undefined") return;
     const seen = window.sessionStorage.getItem("lf-splash-seen");
     if (!seen) setShowSplash(true);
   }, []);
 
-  // Détection et application du thème Jour / Nuit
+  // Détection du mode Jour / Nuit
   useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem("lf-theme-mode");
@@ -94,7 +93,7 @@ function HomeComponent() {
     queryFn: fetchMembers,
   });
 
-  // Filtrage réactif par nom ou serial LF-XXXX
+  // Filtrage des membres dans l'onglet communauté
   const filteredMembers = useMemo(() => {
     if (!searchQuery.trim()) return members;
     const q = searchQuery.toLowerCase().trim();
@@ -119,7 +118,7 @@ function HomeComponent() {
       {/* ========================================================
           1. HEADER NOUVEAU DESIGN MÉDIA
           a. Gauche : Logo LF seul (sans le texte "Living Fellowship")
-          b. Milieu : Onglet de recherche (affiche la communauté)
+          b. Milieu : Onglet de recherche (ouvre la communauté)
           c. Droite : Cloche de notification + Switch Jour/Nuit
           ======================================================== */}
       <header className="sticky top-0 z-30 -mx-4 mb-5 flex items-center justify-between border-b border-border/50 bg-background/85 px-4 py-2.5 backdrop-blur-xl transition-colors">
@@ -204,10 +203,10 @@ function HomeComponent() {
       </header>
 
       {/* ========================================================
-          VUE 1 : LA COMMUNAUTÉ (activée par l'onglet de recherche)
-          Telle qu'elle est sur l'accueil, avec recherche instantanée
+          2. ZONE CENTRALE (ENTRE HEADER ET FOOTER)
           ======================================================== */}
       {viewMode === "community" ? (
+        /* VUE COMMUNAUTÉ (activée par l'onglet recherche) */
         <section>
           {/* Barre de recherche instantanée par nom ou serial */}
           <div className="mb-4 rounded-2xl border border-border bg-card p-3 shadow-sm">
@@ -249,7 +248,7 @@ function HomeComponent() {
                 }}
                 className="text-primary font-medium hover:underline"
               >
-                ← Retour au fil d'accueil
+                ✕ Fermer la recherche
               </button>
             </div>
           </div>
@@ -302,109 +301,11 @@ function HomeComponent() {
           </div>
         </section>
       ) : (
-        /* ========================================================
-            VUE 2 : TABLEAU D'ACCUEIL MÉDIA (Par défaut)
-            Le nouveau hub média de Living Fellowship
-            ======================================================== */
-        <section className="space-y-5">
-          {/* Panneau publicitaire Billboard de la marque */}
-          <Billboard />
-
-          {/* Bannière de bienvenue Média */}
-          <div className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card via-card to-primary/10 p-5 shadow-lg">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-2.5 py-0.5 text-[0.65rem] font-semibold text-primary">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary animate-ping" />
-                  Média Living Fellowship
-                </span>
-                <h1 className="mt-2 text-lg font-extrabold tracking-tight text-foreground sm:text-xl">
-                  L'univers Média & Connexion
-                </h1>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground max-w-sm">
-                  Découvrez les actualités, partagez des inspirations et connectez-vous avec les {members.length} membres actifs.
-                </p>
-              </div>
-            </div>
-
-            {/* Boutons d'action rapide */}
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setViewMode("community")}
-                className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-md transition-opacity hover:opacity-90"
-              >
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none" stroke="currentColor" strokeWidth={2}>
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-                </svg>
-                Explorer la Communauté ({members.length})
-              </button>
-
-              <Link
-                to="/annonces"
-                className="flex items-center gap-1.5 rounded-xl border border-border bg-background/80 px-3.5 py-2 text-xs font-medium text-foreground hover:bg-secondary"
-              >
-                📢 Voir les Annonces
-              </Link>
-            </div>
-          </div>
-
-          {/* Section Aperçu de la Communauté Récente */}
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Membres en Vedette
-                </h2>
-                <p className="text-[0.7rem] text-muted-foreground">
-                  Rejoignez et suivez les membres certifiés
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewMode("community")}
-                className="text-xs font-semibold text-primary hover:underline"
-              >
-                Tout voir →
-              </button>
-            </div>
-
-            <div className="mt-3 divide-y divide-border/60">
-              {isLoading ? (
-                <div className="h-20 animate-pulse rounded-xl bg-secondary/50" />
-              ) : (
-                members.slice(0, 3).map((m: Member) => (
-                  <div key={m.id} className="py-2.5 first:pt-0 last:pb-0">
-                    <MemberCard member={m} roles={rolesMap.get(m.user_id) ?? []} />
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Teaser Living Réels */}
-          <div className="rounded-2xl border border-dashed border-border bg-card/60 p-5 text-center">
-            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none" stroke="currentColor" strokeWidth={2}>
-                <rect x="2" y="2" width="20" height="20" rx="4" />
-                <path d="m10 9 6 3-6 3V9z" fill="currentColor" />
-              </svg>
-            </div>
-            <h3 className="mt-2 text-xs font-bold text-foreground">
-              Living Réels & Formats Courts
-            </h3>
-            <p className="mt-1 text-[0.7rem] text-muted-foreground">
-              Retrouvez prochainement les vidéos courtes, conseils et moments forts directement dans l'onglet Réels.
-            </p>
-          </div>
+        /* VUE ACCUEIL MÉDIA : Entièrement vierge, prête à accueillir les médias */
+        <section className="min-h-[60vh] flex flex-col items-center justify-center text-center">
+          {/* Espace vierge réservé aux futurs médias */}
         </section>
       )}
-
-      {/* Signature */}
-      <p className="mt-8 text-center text-[0.7rem] text-muted-foreground">
-        © {new Date().getFullYear()} Living Fellowship · Personalité · Potentialité · Prospérité
-      </p>
     </main>
   );
 }
