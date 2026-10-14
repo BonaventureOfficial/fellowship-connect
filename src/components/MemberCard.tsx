@@ -1,7 +1,7 @@
 import { useAvatarUrl } from "@/lib/useAvatarUrl";
 import { useState } from "react";
 import { AvatarViewer } from "@/components/AvatarViewer";
-import { VerificationBadge } from "@/components/PlatinumBadge";
+import { PlatinumBadge } from "@/components/PlatinumBadge";
 import { FollowButton } from "@/components/FollowButton";
 import { useFollowCounts } from "@/lib/follows";
 import { fullName, initialsOf, type Member } from "@/lib/members";
@@ -9,15 +9,12 @@ import type { AppRole } from "@/lib/roles";
 
 export function MemberCard({
   member,
-  roles = [],
 }: {
   member: Member;
   roles?: AppRole[];
 }) {
   const [open, setOpen] = useState(false);
   const avatar = useAvatarUrl(member.avatar_url);
-  const isCeo = roles.includes("ceo");
-  const isAdmin = roles.includes("admin");
   const verified = member.status === "Vérifié";
   const name = fullName(member) || "Membre";
 
@@ -25,7 +22,7 @@ export function MemberCard({
 
   return (
     <article className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
-      {/* Avatar cliquable */}
+      {/* Avatar avec contour dégradé média orange/jaune */}
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -45,14 +42,15 @@ export function MemberCard({
         </div>
       </button>
 
-      {/* Infos */}
+      {/* Informations membre */}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 truncate">
             <p className="truncate text-sm font-semibold text-foreground">{name}</p>
-            <VerificationBadge isCeo={isCeo} verified={verified} />
+            {/* Même coche de vérification officielle pour tous les vérifiés */}
+            {verified && <PlatinumBadge className="h-4 w-4" variant="blue" />}
           </div>
-          {/* Bouton Follow / Unfollow */}
+          {/* Bouton Suivre / Abonné */}
           <FollowButton targetMember={member} />
         </div>
 
@@ -60,7 +58,7 @@ export function MemberCard({
           {member.serial ?? "LF-…"}
         </p>
 
-        {/* Compteurs dynamiques Followers / Following */}
+        {/* Compteurs dynamiques Followers / Abonnements */}
         <div className="mt-1.5 flex items-center gap-3 text-[0.72rem] text-muted-foreground">
           <span>
             <strong className="font-semibold text-foreground">
@@ -77,10 +75,11 @@ export function MemberCard({
           </span>
         </div>
 
+        {/* Statut officiel uniquement (sans badge CEO/Admin) */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.68rem] font-semibold ${
-              verified ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
+              verified ? "bg-accent/20 text-accent font-bold" : "bg-muted text-muted-foreground"
             }`}
           >
             <span
@@ -90,11 +89,6 @@ export function MemberCard({
             />
             {member.status}
           </span>
-          {(isCeo || isAdmin) && (
-            <span className="rounded-full bg-primary/15 px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-wide text-primary">
-              {isCeo ? "CEO" : "Admin"}
-            </span>
-          )}
         </div>
       </div>
 
