@@ -11,10 +11,19 @@ import { AvatarViewer } from "@/components/AvatarViewer";
 import { VerificationBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
 import { useFollowCounts } from "@/lib/follows";
-import { lfLogo } from "@/lib/assets";
-import { lfMembers } from "@/lib/assets";
-import { lfCover } from "@/lib/assets";
+import { lfLogo, lfMembers } from "@/lib/assets";
 import { useAvatarUrl } from "@/lib/useAvatarUrl";
+import {
+  Settings,
+  ArrowLeft,
+  Camera,
+  LogOut,
+  SlidersHorizontal,
+  Crown,
+  Grid,
+  Film,
+  Sparkles,
+} from "lucide-react";
 
 export const Route = createFileRoute("/profil")({
   head: () => ({
@@ -46,6 +55,10 @@ function ProfilComponent() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // Onglet actif : "profil" (vue épurée média) ou "parametres" (réglages & compte)
+  const [activeTab, setActiveTab] = useState<"profil" | "parametres">("profil");
+  const [mediaTab, setMediaTab] = useState<"publications" | "reels">("publications");
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -205,9 +218,13 @@ function ProfilComponent() {
       try {
         localStorage.removeItem("lf_ref");
       } catch {}
-      setSponsorOk(`Parrain lié avec succès : ${code} (${sponsor.first_name} ${sponsor.last_name}).`);
+      setSponsorOk(
+        `Parrain lié avec succès : ${code} (${sponsor.first_name} ${sponsor.last_name}).`,
+      );
     } catch (e: unknown) {
-      setSponsorErr(e instanceof Error ? e.message : "Erreur lors de la liaison du parrain.");
+      setSponsorErr(
+        e instanceof Error ? e.message : "Erreur lors de la liaison du parrain.",
+      );
     } finally {
       setSavingSponsor(false);
     }
@@ -252,15 +269,16 @@ function ProfilComponent() {
         </p>
       </div>
 
-      {/* Espace membre */}
+      {/* Contenu principal */}
       <section className="mt-6 rounded-2xl border border-border bg-card p-5">
-        <h2 className="text-sm font-semibold text-foreground">Mon profil</h2>
-
         {loading ? (
-          <p className="mt-3 text-sm text-muted-foreground">Chargement…</p>
+          <p className="py-4 text-center text-sm text-muted-foreground">
+            Chargement…
+          </p>
         ) : !user ? (
-          <div className="mt-3">
-            <p className="text-sm text-muted-foreground">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Mon profil</h2>
+            <p className="mt-3 text-sm text-muted-foreground">
               Connectez-vous pour mettre à jour votre photo, votre nom et prénom
               et recevoir votre Serial Number.
             </p>
@@ -271,27 +289,59 @@ function ProfilComponent() {
               <Link to="/parametres">Paramètres</Link>
             </Button>
           </div>
-        ) : (
-          <div className="mt-4">
-            <div className="flex flex-col items-center">
-              <button
+        ) : activeTab === "profil" ? (
+          /* ========================================================
+             VUE 1 : PROFIL SOCIAL ÉPURÉ
+             ======================================================== */
+          <div>
+            {/* Header de la carte avec bouton Paramètres en haut à droite */}
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <h2 className="text-sm font-semibold text-foreground">Mon profil</h2>
+              <Button
                 type="button"
-                onClick={() => setViewer(true)}
-                aria-label="Voir ma photo en grand"
-                className="lf-ring-gradient rounded-full p-[3px] transition-transform hover:scale-[1.03]"
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveTab("parametres")}
+                className="gap-2 rounded-xl border-border bg-background/50 hover:border-primary hover:text-primary transition-all text-xs font-medium"
               >
-                <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-full bg-background text-3xl font-extrabold text-foreground">
-                  {avatarSrc ? (
-                    <img
-                      src={avatarSrc}
-                      alt={displayName || "Ma photo"}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    initialsOf(displayName || "LF")
-                  )}
-                </div>
-              </button>
+                <Settings className="h-3.5 w-3.5 text-primary" />
+                <span>Paramètres</span>
+              </Button>
+            </div>
+
+            {/* Centre de profil : Avatar + Infos */}
+            <div className="mt-4 flex flex-col items-center text-center">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setViewer(true)}
+                  aria-label="Voir ma photo en grand"
+                  className="lf-ring-gradient rounded-full p-[3px] transition-transform hover:scale-[1.03]"
+                >
+                  <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full bg-background text-3xl font-extrabold text-foreground sm:h-36 sm:w-36">
+                    {avatarSrc ? (
+                      <img
+                        src={avatarSrc}
+                        alt={displayName || "Ma photo"}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      initialsOf(displayName || "LF")
+                    )}
+                  </div>
+                </button>
+
+                {/* Bouton rapide changer la photo */}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => fileRef.current?.click()}
+                  aria-label="Changer la photo"
+                  className="absolute bottom-1 right-1 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md transition-transform hover:scale-110 active:scale-95 disabled:opacity-50"
+                >
+                  <Camera className="h-4 w-4" />
+                </button>
+              </div>
 
               <input
                 ref={fileRef}
@@ -304,28 +354,28 @@ function ProfilComponent() {
                   e.target.value = "";
                 }}
               />
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                disabled={busy}
-                onClick={() => fileRef.current?.click()}
-              >
-                Changer la photo
-              </Button>
 
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+              {/* Nom & Prénom du membre */}
+              <h3 className="mt-3.5 text-lg font-bold text-foreground sm:text-xl">
+                {displayName || "Membre Living Fellowship"}
+              </h3>
+
+              {/* Badges Serial et Statut */}
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
                 <span className="rounded-full bg-muted px-3 py-1 font-mono text-xs text-muted-foreground">
                   {member?.serial ?? "Serial en attente"}
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
                   {member?.status ?? "Non Vérifié"}
-                  <VerificationBadge isCeo={isCeo} verified={member?.status === "Vérifié"} />
+                  <VerificationBadge
+                    isCeo={isCeo}
+                    verified={member?.status === "Vérifié"}
+                  />
                 </span>
               </div>
 
               {/* Compteurs dynamiques Followers & Abonnements */}
-              <div className="mt-3 flex items-center justify-center gap-6 rounded-2xl border border-border/80 bg-background/60 px-5 py-2.5 text-xs">
+              <div className="mt-4 flex w-full max-w-xs items-center justify-around rounded-2xl border border-border/80 bg-background/60 px-5 py-2.5 text-xs">
                 <div className="text-center">
                   <p className="text-base font-bold text-foreground">
                     {followCounts ? followCounts.followersCount : 0}
@@ -345,39 +395,122 @@ function ProfilComponent() {
                 </div>
               </div>
 
-              {/* Parrain lié */}
+              {/* Parrain lié si présent */}
               {member?.referred_by && (
-                <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
+                <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
                   <span>Parrainé par :</span>
                   <span className="font-mono font-bold">{member.referred_by}</span>
                 </div>
               )}
+            </div>
 
+            {/* Espace Média : Publications & Réels du profil */}
+            <div className="mt-8 pt-4 border-t border-border/40">
+              <div className="flex justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("publications")}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    mediaTab === "publications"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  <Grid className="h-3.5 w-3.5" />
+                  <span>Publications</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaTab("reels")}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    mediaTab === "reels"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                  }`}
+                >
+                  <Film className="h-3.5 w-3.5" />
+                  <span>Réels</span>
+                </button>
+              </div>
+
+              {/* Zone vierge médias prête pour les prochains contenus */}
+              <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-background/30 px-6 py-10 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+                <h4 className="mt-3 text-sm font-semibold text-foreground">
+                  {mediaTab === "publications"
+                    ? "Aucune publication pour le moment"
+                    : "Aucun réel pour le moment"}
+                </h4>
+                <p className="mt-1 max-w-sm text-xs text-muted-foreground leading-relaxed">
+                  Cet espace accueillera vos photos, vidéos et réels partagés avec la communauté Living Fellowship.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ========================================================
+             VUE 2 : ONGLET PARAMÈTRES (RÉGLAGES & COMPTE)
+             ======================================================== */
+          <div className="space-y-6">
+            {/* Header avec retour au profil */}
+            <div className="flex items-center justify-between pb-3 border-b border-border/40">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setActiveTab("profil")}
+                className="gap-1.5 -ml-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Retour au profil</span>
+              </Button>
+              <span className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Paramètres
+              </span>
+            </div>
+
+            {/* Raccourcis Paramètres du compte & Espace CEO */}
+            <div className="space-y-2.5">
               <Button
                 type="button"
                 variant="outline"
-                className="mt-5 w-full"
+                className="w-full justify-between rounded-xl py-5"
                 onClick={() => void navigate({ to: "/parametres" })}
               >
-                Paramètres
+                <div className="flex items-center gap-2.5">
+                  <SlidersHorizontal className="h-4 w-4 text-primary" />
+                  <span className="font-semibold text-sm">Paramètres avancés du compte</span>
+                </div>
+                <span className="text-xs text-muted-foreground">Vérification, Sécurité →</span>
               </Button>
 
               {isCeo && (
                 <Button
                   type="button"
                   variant="secondary"
-                  className="mt-3 w-full font-semibold uppercase tracking-wider"
+                  className="w-full justify-between rounded-xl py-5 font-semibold uppercase tracking-wider"
                   onClick={() => void navigate({ to: "/ceo" })}
                 >
-                  Espace CEO
+                  <div className="flex items-center gap-2.5">
+                    <Crown className="h-4 w-4 text-amber-500" />
+                    <span>Espace CEO</span>
+                  </div>
+                  <span className="text-xs font-normal">Administration →</span>
                 </Button>
               )}
             </div>
 
             {/* Formulaire identité */}
-            <div className="mt-6 space-y-3">
+            <div className="rounded-xl border border-border/70 bg-background/40 p-4 space-y-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Modifier mon identité
+              </h3>
               <div>
-                <Label htmlFor="first_name">Prénom</Label>
+                <Label htmlFor="first_name" className="text-xs">
+                  Prénom
+                </Label>
                 <Input
                   id="first_name"
                   value={firstName}
@@ -388,7 +521,9 @@ function ProfilComponent() {
                 />
               </div>
               <div>
-                <Label htmlFor="last_name">Nom</Label>
+                <Label htmlFor="last_name" className="text-xs">
+                  Nom
+                </Label>
                 <Input
                   id="last_name"
                   value={lastName}
@@ -403,7 +538,7 @@ function ProfilComponent() {
               {err && <p className="text-xs text-destructive">{err}</p>}
 
               <Button
-                className="w-full"
+                className="w-full mt-2"
                 disabled={!canConfirm}
                 onClick={onSaveIdentity}
               >
@@ -417,7 +552,7 @@ function ProfilComponent() {
 
             {/* Section ajout d'un parrain (si absent) */}
             {!member?.referred_by && (
-              <div className="mt-6 rounded-xl border border-dashed border-border p-4 bg-muted/20">
+              <div className="rounded-xl border border-dashed border-border p-4 bg-muted/20">
                 <p className="text-xs font-semibold text-foreground">
                   Avez-vous un parrain Living Fellowship ?
                 </p>
@@ -447,18 +582,22 @@ function ProfilComponent() {
               </div>
             )}
 
-            <Button
-              variant="destructive"
-              className="mt-6 w-full"
-              onClick={signOut}
-            >
-              Se déconnecter
-            </Button>
+            {/* Bouton de déconnexion */}
+            <div className="pt-2">
+              <Button
+                variant="destructive"
+                className="w-full gap-2 rounded-xl"
+                onClick={signOut}
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Se déconnecter</span>
+              </Button>
+            </div>
           </div>
         )}
       </section>
 
-      {/* Vision */}
+      {/* Vision & Devise */}
       <section className="mt-6 rounded-2xl border border-border bg-card p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Notre devise
@@ -471,7 +610,7 @@ function ProfilComponent() {
         </p>
       </section>
 
-      {/* Contact */}
+      {/* Contact & Support */}
       <section className="mt-6 mb-12 rounded-2xl border border-border bg-card p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Contact & Support
