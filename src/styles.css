@@ -254,3 +254,26 @@
 .lf-ring-gradient {
   background: linear-gradient(135deg, var(--brand-violet), var(--brand-cyan));
 }
+
+.light {
+  --background: oklch(0.985 0.005 285);
+  --foreground: oklch(0.16 0.03 285);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.16 0.03 285);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.16 0.03 285);
+  --primary: oklch(0.58 0.28 296);
+  --primary-foreground: oklch(0.98 0.01 250);
+  --secondary: oklch(0.94 0.02 285);
+  --secondary-foreground: oklch(0.16 0.03 285);
+  --muted: oklch(0.94 0.015 285);
+  --muted-foreground: oklch(0.48 0.03 270);
+  --accent: oklch(0.75 0.14 200);
+  --accent-foreground: oklch(0.16 0.04 285);
+  --destructive: oklch(0.60 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 250);
+  --border: oklch(0.88 0.02 285);
+  --input: oklch(0.88 0.02 285);
+  --ring: oklch(0.58 0.28 296);
+}
+
