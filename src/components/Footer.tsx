@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { PublishModal } from "@/components/PublishModal";
 
 export function Footer() {
   const [showReelsModal, setShowReelsModal] = useState(false);
@@ -107,8 +108,8 @@ export function Footer() {
                   stroke="currentColor"
                   strokeWidth={1.8}
                 >
-                  <circle cx="12" cy="8" r="3.5" />
-                  <path d="M4.5 20a7.5 7.5 0 0 1 15 0" strokeLinecap="round" />
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
                 </svg>
               </span>
               <span className={isProfileActive ? "text-primary font-semibold" : ""}>
@@ -119,7 +120,7 @@ export function Footer() {
         </ul>
       </nav>
 
-      {/* Modal d'attente Living Réels */}
+      {/* Modal d'attente Réels */}
       {showReelsModal && (
         <div
           role="dialog"
@@ -131,22 +132,24 @@ export function Footer() {
             className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/20 text-primary">
-              <svg viewBox="0 0 24 24" className="h-8 w-8 fill-none" stroke="currentColor" strokeWidth={1.8}>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <svg viewBox="0 0 24 24" className="h-7 w-7 fill-none" stroke="currentColor" strokeWidth={1.8}>
                 <rect x="2" y="2" width="20" height="20" rx="4" />
                 <path d="m10 9 6 3-6 3V9z" fill="currentColor" />
+                <path d="M2 7h20M2 17h20" strokeLinecap="round" />
               </svg>
             </div>
             <h3 className="mt-4 text-lg font-bold text-foreground">
-              Living Réels
+              Section Réels
             </h3>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              La plateforme de vidéos courtes et témoignages verticaux de Living Fellowship est en cours de préparation.
+            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+              Le flux vertical de courtes vidéos inspirantes arrive très bientôt.
+              Vous pouvez déjà enregistrer et publier vos premiers réels via le bouton central (+) !
             </p>
             <button
               type="button"
               onClick={() => setShowReelsModal(false)}
-              className="mt-6 w-full rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground shadow-md transition-opacity hover:opacity-90"
+              className="mt-6 w-full rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
             >
               Compris !
             </button>
@@ -154,79 +157,11 @@ export function Footer() {
         </div>
       )}
 
-      {/* Modal d'attente Publier */}
-      {showPublishModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          onClick={() => setShowPublishModal(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-primary to-accent text-white shadow-lg">
-              <svg viewBox="0 0 24 24" className="h-7 w-7 stroke-white" strokeWidth={2.2} strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </div>
-            <h3 className="mt-4 text-lg font-bold text-foreground">
-              Créer & Publier
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Partagez avec la communauté Living Fellowship :
-            </p>
-
-            <div className="mt-4 space-y-2 text-left">
-              <Link
-                to="/annonces"
-                onClick={() => setShowPublishModal(false)}
-                className="flex items-center justify-between rounded-xl border border-border bg-background p-3 transition-colors hover:border-primary"
-              >
-                <div>
-                  <p className="text-xs font-semibold text-foreground">📢 Annonce officielle</p>
-                  <p className="text-[0.65rem] text-muted-foreground">Pour les administrateurs et dirigeants</p>
-                </div>
-                <span className="text-xs text-primary font-bold">→</span>
-              </Link>
-
-              <div className="rounded-xl border border-dashed border-border/80 bg-secondary/40 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-foreground">🎬 Nouveau Réel / Vidéo</p>
-                  <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[0.6rem] font-bold text-primary">
-                    Bientôt
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[0.65rem] text-muted-foreground">
-                  Enregistrez et publiez une courte vidéo verticale.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-dashed border-border/80 bg-secondary/40 p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-foreground">📝 Post Média & Photo</p>
-                  <span className="rounded-full bg-accent/20 px-2 py-0.5 text-[0.6rem] font-bold text-accent">
-                    Bientôt
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[0.65rem] text-muted-foreground">
-                  Partagez une inspiration avec photo et texte.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowPublishModal(false)}
-              className="mt-5 w-full rounded-xl border border-border py-2 text-xs font-medium text-muted-foreground hover:bg-secondary"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Nouveau Studio de Publication complet */}
+      <PublishModal
+        open={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+      />
     </>
   );
 }
