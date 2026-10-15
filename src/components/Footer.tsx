@@ -1,6 +1,505 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { PublishModal } from "@/components/PublishModal";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import type { Member } from "@/lib/members";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Film,
+  Video,
+  Image as ImageIcon,
+  FileText,
+  UploadCloud,
+  CheckCircle2,
+  AlertCircle,
+  X,
+  RotateCcw,
+  Sparkles,
+} from "lucide-react";
+
+type MediaType = "video" | "reel" | "photo" | "text";
+
+interface PublishModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+function PublishModal({ open, onClose }: PublishModalProps) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [mediaType, setMediaType] = useState<MediaType>("video");
+  const [file, setFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+
+  const [uploading, setUploading] = useState(false);
+  const [progressText, setProgressText] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Vérifier le statut du membre
+  const { data: member } = useQuery({
+    queryKey: ["my-member", user?.id],
+    enabled: !!user,
+    queryFn: async (): Promise<Member | null> => {
+      const { data, error } = await supabase
+        .from("members")
+        .select("id,user_id,first_name,last_name,avatar_url,serial,status")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as Member | null) ?? null;
+    },
+  });
+
+  if (!open) return null;
+
+  const isVerified = member?.status === "Vérifié";
+
+  const handleFileSelect = (selectedFile: File) => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (!selectedFile.type.startsWith("video/")) {
+      setErrorMsg("Veuillez sélectionner un fichier vidéo valide (MP4, WebM, MOV...).");
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(selectedFile);
+    setVideoPreviewUrl(previewUrl);
+    setFile(selectedFile);
+
+    // Détection automatique de la durée exacte du fichier
+    const tempVideo = document.createElement("video");
+    tempVideo.preload = "metadata";
+    tempVideo.src = previewUrl;
+    tempVideo.onloadedmetadata = () => {
+      const dur = Math.round(tempVideo.duration);
+      setDuration(dur);
+      if (dur > 3600) {
+        setErrorMsg("Cette vidéo dépasse la durée maximale autorisée de 60 minutes.");
+      }
+    };
+    tempVideo.onerror = () => {
+      setErrorMsg("Impossible de lire la durée de la vidéo. Assurez-vous que le format est compatible.");
+    };
+  };
+
+  const handleReset = () => {
+    if (videoPreviewUrl) {
+      URL.revokeObjectURL(videoPreviewUrl);
+    }
+    setFile(null);
+    setVideoPreviewUrl(null);
+    setDuration(null);
+    setErrorMsg(null);
+  };
+
+  const handleClose = () => {
+    handleReset();
+    setTitle("");
+    setDescription("");
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    onClose();
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+  };
+
+  const handlePublish = async () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    // Règle 4.a : Vérifier obligatoirement que le créateur est vérifié
+    if (!user) {
+      setErrorMsg("Vous devez être connecté pour publier.");
+      return;
+    }
+
+    if (!isVerified) {
+      setErrorMsg(
+        "Seuls les membres officiellement VÉRIFIÉS peuvent publier des vidéos et des réels. Demandez votre badge dans les paramètres."
+      );
+      return;
+    }
+
+    // Fichier présent
+    if (!file) {
+      setErrorMsg("Veuillez importer un fichier vidéo.");
+      return;
+    }
+
+    // Règle 4.b : Ne pas dépasser 60 minutes (3600 secondes)
+    if (duration !== null && duration > 3600) {
+      setErrorMsg("La vidéo dépasse la durée maximale autorisée de 60 minutes.");
+      return;
+    }
+
+    // Règle 3 : Titre obligatoire (*)
+    if (!title.trim()) {
+      setErrorMsg("Le titre de la publication est obligatoire (*).");
+      return;
+    }
+
+    setUploading(true);
+    setProgressText("Téléversement de la vidéo en cours...");
+
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
+      const filePath = `${user.id}/${Date.now()}-${mediaType}.${ext}`;
+
+      // 1. Upload dans le bucket storage 'videos'
+      const { error: uploadError } = await supabase.storage
+        .from("videos")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(`Erreur lors du téléversement : ${uploadError.message}`);
+      }
+
+      setProgressText("Enregistrement dans la communauté...");
+
+      // 2. URL publique de la vidéo
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("videos").getPublicUrl(filePath);
+
+      // 3. Insertion dans la table public.videos
+      const authorName = `${member?.first_name ?? ""} ${member?.last_name ?? ""}`.trim() || "Membre";
+
+      const { error: insertError } = await supabase.from("videos").insert({
+        user_id: user.id,
+        author_serial: member?.serial ?? null,
+        author_name: authorName,
+        author_avatar: member?.avatar_url ?? null,
+        type: mediaType, // 'video' pour Accueil, 'reel' pour Réels
+        title: title.trim(),
+        description: description.trim() || null,
+        video_url: publicUrl,
+        duration_seconds: duration,
+      });
+
+      if (insertError) {
+        throw new Error(`Erreur d'enregistrement : ${insertError.message}`);
+      }
+
+      setSuccessMsg(
+        mediaType === "video"
+          ? "Vidéo publiée avec succès sur l'Accueil !"
+          : "Réel publié avec succès dans la section Réels !"
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["videos"] });
+
+      setTimeout(() => {
+        handleClose();
+      }, 1500);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Une erreur est survenue lors de la publication.");
+    } finally {
+      setUploading(false);
+      setProgressText("");
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-md p-0 sm:p-4 animate-in fade-in duration-200"
+    >
+      <div className="relative flex max-h-[92vh] w-full max-w-xl flex-col rounded-t-[28px] sm:rounded-3xl border border-border bg-card shadow-2xl overflow-hidden">
+        {/* En-tête */}
+        <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <h3 className="text-base font-bold text-foreground">Créer une publication</h3>
+          </div>
+          <button
+            type="button"
+            onClick={handleClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Défilement du contenu */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* 1. Les 4 choix en colonnes */}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Format de contenu
+            </label>
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {/* a. Vidéo */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMediaType("video");
+                  handleReset();
+                }}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-2.5 transition-all ${
+                  mediaType === "video"
+                    ? "border-primary bg-primary/10 text-primary shadow-sm"
+                    : "border-border/80 bg-background/50 text-muted-foreground hover:border-primary/50"
+                }`}
+              >
+                <Video className="h-5 w-5" />
+                <span className="text-xs font-semibold">Vidéo</span>
+              </button>
+
+              {/* b. Réel */}
+              <button
+                type="button"
+                onClick={() => {
+                  setMediaType("reel");
+                  handleReset();
+                }}
+                className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-2.5 transition-all ${
+                  mediaType === "reel"
+                    ? "border-primary bg-primary/10 text-primary shadow-sm"
+                    : "border-border/80 bg-background/50 text-muted-foreground hover:border-primary/50"
+                }`}
+              >
+                <Film className="h-5 w-5" />
+                <span className="text-xs font-semibold">Réel</span>
+              </button>
+
+              {/* c. Photo */}
+              <button
+                type="button"
+                onClick={() => setMediaType("photo")}
+                className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-2.5 transition-all ${
+                  mediaType === "photo"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border"
+                }`}
+              >
+                <ImageIcon className="h-5 w-5 opacity-70" />
+                <span className="text-xs font-medium">Photo</span>
+                <span className="text-[0.6rem] font-bold text-accent">Bientôt</span>
+              </button>
+
+              {/* d. Texte */}
+              <button
+                type="button"
+                onClick={() => setMediaType("text")}
+                className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-2.5 transition-all ${
+                  mediaType === "text"
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border"
+                }`}
+              >
+                <FileText className="h-5 w-5 opacity-70" />
+                <span className="text-xs font-medium">Texte</span>
+                <span className="text-[0.6rem] font-bold text-accent">Bientôt</span>
+              </button>
+            </div>
+
+            <p className="mt-2 text-[0.72rem] text-muted-foreground">
+              {mediaType === "video" && "📌 Les vidéos longues sont diffusées sur le flux d'Accueil."}
+              {mediaType === "reel" && "📌 Les Réels (format vertical) sont diffusés dans l'onglet Réels."}
+              {mediaType === "photo" && "⏳ La publication photo sera bientôt disponible."}
+              {mediaType === "text" && "⏳ La publication texte sera bientôt disponible."}
+            </p>
+          </div>
+
+          {/* 2. Grand cadre pour toucher, importer et jouer la vidéo */}
+          {mediaType === "video" || mediaType === "reel" ? (
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleFileSelect(f);
+                }}
+              />
+
+              {!videoPreviewUrl ? (
+                /* Grand cadre cliquable pour importer depuis la mémoire */
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-background/50 p-8 text-center transition-all hover:border-primary hover:bg-primary/5 active:scale-[0.99] ${
+                    mediaType === "reel" ? "aspect-[9/12] max-h-72" : "aspect-video max-h-60"
+                  }`}
+                >
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary transition-transform group-hover:scale-110">
+                    <UploadCloud className="h-7 w-7" />
+                  </div>
+                  <p className="mt-3 text-sm font-bold text-foreground">
+                    Touchez ici pour importer votre {mediaType === "video" ? "vidéo" : "réel"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Ouvre automatiquement le stockage de votre appareil
+                  </p>
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
+                    Format MP4, MOV, WebM · Max 60 minutes
+                  </span>
+                </button>
+              ) : (
+                /* Lecteur vidéo intégré pour prévisualiser et jouer avant publication */
+                <div className="relative overflow-hidden rounded-2xl border border-border bg-black">
+                  <video
+                    controls
+                    playsInline
+                    src={videoPreviewUrl}
+                    className={`w-full bg-black ${
+                      mediaType === "reel" ? "aspect-[9/14] max-h-80 object-contain mx-auto" : "aspect-video object-cover"
+                    }`}
+                  />
+
+                  {/* Barre d'informations */}
+                  <div className="flex items-center justify-between bg-card/90 px-3 py-2 text-xs border-t border-border">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-foreground truncate max-w-[180px]">
+                        {file?.name}
+                      </span>
+                      {duration !== null && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[0.68rem] font-bold ${
+                            duration <= 3600
+                              ? "bg-primary/20 text-primary"
+                              : "bg-destructive/20 text-destructive"
+                          }`}
+                        >
+                          ⏱ {formatDuration(duration)} {duration > 3600 && "(Dépasse 60 min !)"}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleReset}
+                      className="inline-flex items-center gap-1 text-[0.72rem] text-muted-foreground hover:text-foreground"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Changer</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center">
+              <Sparkles className="h-8 w-8 text-accent" />
+              <p className="mt-2 text-sm font-semibold text-foreground">
+                Bientôt disponible !
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground max-w-xs">
+                Les vidéos et réels sont prioritaires pour lancer la dynamique média.
+              </p>
+            </div>
+          )}
+
+          {/* 3. Titre* et Description */}
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="pub-title" className="text-xs font-semibold text-foreground">
+                Titre de la publication <span className="text-primary font-bold">*</span>
+              </label>
+              <Input
+                id="pub-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ex : Message inspirant pour la communauté 2026"
+                disabled={uploading}
+                className="mt-1"
+                maxLength={120}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="pub-desc" className="text-xs font-semibold text-foreground">
+                Description <span className="text-muted-foreground font-normal">(optionnelle mais importante)</span>
+              </label>
+              <Textarea
+                id="pub-desc"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Partagez le contexte, les points clés ou les inspirations de votre vidéo..."
+                disabled={uploading}
+                rows={3}
+                className="mt-1 resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Messages alertes */}
+          {errorMsg && (
+            <div className="flex items-start gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive border border-destructive/20">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="flex items-center gap-2 rounded-xl bg-primary/10 p-3 text-xs text-primary border border-primary/20">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              <span>{successMsg}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 4. Bouton Publier avec contrôles obligatoires */}
+        <div className="border-t border-border/60 bg-card px-5 py-3 flex items-center justify-between gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleClose}
+            disabled={uploading}
+            className="rounded-xl text-xs"
+          >
+            Annuler
+          </Button>
+
+          <Button
+            type="button"
+            onClick={handlePublish}
+            disabled={
+              uploading ||
+              mediaType === "photo" ||
+              mediaType === "text" ||
+              !file ||
+              !title.trim() ||
+              (duration !== null && duration > 3600)
+            }
+            className="flex-1 rounded-xl bg-gradient-to-r from-primary to-accent font-semibold text-white shadow-md shadow-primary/20 hover:opacity-90 disabled:opacity-50"
+          >
+            {uploading ? (
+              <span className="flex items-center gap-2">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                {progressText || "Publication en cours…"}
+              </span>
+            ) : (
+              `Publier ${mediaType === "reel" ? "le Réel" : "la Vidéo"}`
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Footer() {
   const [showReelsModal, setShowReelsModal] = useState(false);
@@ -108,7 +607,7 @@ export function Footer() {
                   stroke="currentColor"
                   strokeWidth={1.8}
                 >
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
               </span>
@@ -120,44 +619,36 @@ export function Footer() {
         </ul>
       </nav>
 
-      {/* Modal d'attente Réels */}
+      {/* Modal Réels */}
       {showReelsModal && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
-          onClick={() => setShowReelsModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-200"
         >
-          <div
-            className="w-full max-w-sm rounded-3xl border border-border bg-card p-6 text-center shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <svg viewBox="0 0 24 24" className="h-7 w-7 fill-none" stroke="currentColor" strokeWidth={1.8}>
                 <rect x="2" y="2" width="20" height="20" rx="4" />
                 <path d="m10 9 6 3-6 3V9z" fill="currentColor" />
-                <path d="M2 7h20M2 17h20" strokeLinecap="round" />
               </svg>
             </div>
-            <h3 className="mt-4 text-lg font-bold text-foreground">
-              Section Réels
-            </h3>
-            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-              Le flux vertical de courtes vidéos inspirantes arrive très bientôt.
-              Vous pouvez déjà enregistrer et publier vos premiers réels via le bouton central (+) !
+            <h3 className="mt-4 text-base font-bold text-foreground">Section Réels</h3>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              L'espace vidéo courte arrive très bientôt. Vous pourrez y découvrir les Réels des membres vérifiés.
             </p>
             <button
               type="button"
               onClick={() => setShowReelsModal(false)}
-              className="mt-6 w-full rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              className="mt-5 w-full rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
             >
-              Compris !
+              Compris
             </button>
           </div>
         </div>
       )}
 
-      {/* Nouveau Studio de Publication complet */}
+      {/* Modal Publier */}
       <PublishModal
         open={showPublishModal}
         onClose={() => setShowPublishModal(false)}
