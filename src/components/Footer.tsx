@@ -22,17 +22,32 @@ import {
 
 type MediaType = "video" | "reel" | "photo" | "text";
 
+interface VideoPost {
+  id: string;
+  user_id: string;
+  author_name: string;
+  author_serial: string | null;
+  author_avatar: string | null;
+  type: "video" | "reel";
+  title: string;
+  description: string | null;
+  video_url: string;
+  duration_seconds: number | null;
+  created_at: string;
+}
+
 interface PublishModalProps {
   open: boolean;
+  defaultType?: MediaType;
   onClose: () => void;
 }
 
-function PublishModal({ open, onClose }: PublishModalProps) {
+function PublishModal({ open, defaultType = "video", onClose }: PublishModalProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [mediaType, setMediaType] = useState<MediaType>("video");
+  const [mediaType, setMediaType] = useState<MediaType>(defaultType);
   const [file, setFile] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
@@ -41,6 +56,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
   const [description, setDescription] = useState("");
 
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [progressText, setProgressText] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -63,6 +79,8 @@ function PublishModal({ open, onClose }: PublishModalProps) {
   if (!open) return null;
 
   const isVerified = member?.status === "Vérifié";
+  const fileSizeMb = file ? (file.size / (1024 * 1024)).toFixed(1) : null;
+  const isLargeFile = file ? file.size > 50 * 1024 * 1024 : false;
 
   const handleFileSelect = (selectedFile: File) => {
     setErrorMsg(null);
@@ -77,7 +95,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
     setVideoPreviewUrl(previewUrl);
     setFile(selectedFile);
 
-    // Détection automatique de la durée exacte du fichier
+    // Détection durée
     const tempVideo = document.createElement("video");
     tempVideo.preload = "metadata";
     tempVideo.src = previewUrl;
@@ -100,6 +118,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
     setFile(null);
     setVideoPreviewUrl(null);
     setDuration(null);
+    setUploadProgress(0);
     setErrorMsg(null);
   };
 
@@ -122,7 +141,6 @@ function PublishModal({ open, onClose }: PublishModalProps) {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    // Règle 4.a : Vérifier obligatoirement que le créateur est vérifié
     if (!user) {
       setErrorMsg("Vous devez être connecté pour publier.");
       return;
@@ -135,51 +153,98 @@ function PublishModal({ open, onClose }: PublishModalProps) {
       return;
     }
 
-    // Fichier présent
     if (!file) {
       setErrorMsg("Veuillez importer un fichier vidéo.");
       return;
     }
 
-    // Règle 4.b : Ne pas dépasser 60 minutes (3600 secondes)
     if (duration !== null && duration > 3600) {
       setErrorMsg("La vidéo dépasse la durée maximale autorisée de 60 minutes.");
       return;
     }
 
-    // Règle 3 : Titre obligatoire (*)
     if (!title.trim()) {
       setErrorMsg("Le titre de la publication est obligatoire (*).");
       return;
     }
 
     setUploading(true);
-    setProgressText("Téléversement de la vidéo en cours...");
+    setUploadProgress(5);
+    setProgressText("Préparation de l'envoi...");
 
     try {
       const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
       const filePath = `${user.id}/${Date.now()}-${mediaType}.${ext}`;
 
-      // 1. Upload dans le bucket storage 'videos'
-      const { error: uploadError } = await supabase.storage
-        .from("videos")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
-      if (uploadError) {
-        throw new Error(`Erreur lors du téléversement : ${uploadError.message}`);
+      // 1. Upload accéléré avec suivi du pourcentage
+      if (supabaseUrl && anonKey) {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", `${supabaseUrl}/storage/v1/object/videos/${filePath}`, true);
+          xhr.setRequestHeader("apikey", anonKey);
+          if (token) {
+            xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+          }
+          xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
+          xhr.setRequestHeader("x-upsert", "true");
+
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const pct = Math.round((event.loaded / event.total) * 100);
+              const loadedMb = (event.loaded / (1024 * 1024)).toFixed(1);
+              const totalMb = (event.total / (1024 * 1024)).toFixed(1);
+              setUploadProgress(pct);
+              setProgressText(`Téléversement : ${pct}% (${loadedMb} Mo / ${totalMb} Mo)`);
+            }
+          };
+
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+            } else if (xhr.status === 413) {
+              reject(
+                new Error(
+                  "Fichier supérieur à 50 Mo (limite Supabase Storage gratuit). Compressez votre vidéo."
+                )
+              );
+            } else {
+              let detail = "";
+              try {
+                const body = JSON.parse(xhr.responseText);
+                detail = body.message || body.error || "";
+              } catch {}
+              reject(new Error(detail || `Erreur d'envoi (${xhr.status})`));
+            }
+          };
+
+          xhr.onerror = () => reject(new Error("Erreur réseau pendant le téléversement de la vidéo."));
+          xhr.ontimeout = () =>
+            reject(new Error("Délai dépassé. La vidéo est trop volumineuse pour la vitesse de connexion."));
+          xhr.timeout = 15 * 60 * 1000;
+
+          xhr.send(file);
+        });
+      } else {
+        const { error: uploadError } = await supabase.storage
+          .from("videos")
+          .upload(filePath, file, { cacheControl: "3600", upsert: true });
+        if (uploadError) throw uploadError;
       }
 
+      setUploadProgress(100);
       setProgressText("Enregistrement dans la communauté...");
 
-      // 2. URL publique de la vidéo
+      // 2. URL publique
       const {
         data: { publicUrl },
       } = supabase.storage.from("videos").getPublicUrl(filePath);
 
-      // 3. Insertion dans la table public.videos
+      // 3. Insertion en base de données
       const authorName = `${member?.first_name ?? ""} ${member?.last_name ?? ""}`.trim() || "Membre";
 
       const { error: insertError } = await supabase.from("videos").insert({
@@ -187,7 +252,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
         author_serial: member?.serial ?? null,
         author_name: authorName,
         author_avatar: member?.avatar_url ?? null,
-        type: mediaType, // 'video' pour Accueil, 'reel' pour Réels
+        type: mediaType,
         title: title.trim(),
         description: description.trim() || null,
         video_url: publicUrl,
@@ -204,6 +269,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
           : "Réel publié avec succès dans la section Réels !"
       );
 
+      // Actualiser les requêtes pour affichage immédiat
       queryClient.invalidateQueries({ queryKey: ["videos"] });
 
       setTimeout(() => {
@@ -213,7 +279,6 @@ function PublishModal({ open, onClose }: PublishModalProps) {
       setErrorMsg(err instanceof Error ? err.message : "Une erreur est survenue lors de la publication.");
     } finally {
       setUploading(false);
-      setProgressText("");
     }
   };
 
@@ -241,15 +306,14 @@ function PublishModal({ open, onClose }: PublishModalProps) {
           </button>
         </div>
 
-        {/* Défilement du contenu */}
+        {/* Contenu */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-          {/* 1. Les 4 choix en colonnes */}
+          {/* Format */}
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Format de contenu
             </label>
             <div className="mt-2 grid grid-cols-4 gap-2">
-              {/* a. Vidéo */}
               <button
                 type="button"
                 onClick={() => {
@@ -266,7 +330,6 @@ function PublishModal({ open, onClose }: PublishModalProps) {
                 <span className="text-xs font-semibold">Vidéo</span>
               </button>
 
-              {/* b. Réel */}
               <button
                 type="button"
                 onClick={() => {
@@ -283,32 +346,22 @@ function PublishModal({ open, onClose }: PublishModalProps) {
                 <span className="text-xs font-semibold">Réel</span>
               </button>
 
-              {/* c. Photo */}
               <button
                 type="button"
                 onClick={() => setMediaType("photo")}
-                className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-2.5 transition-all ${
-                  mediaType === "photo"
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border"
-                }`}
+                className="relative flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-muted/20 p-2.5 text-muted-foreground opacity-70"
               >
-                <ImageIcon className="h-5 w-5 opacity-70" />
+                <ImageIcon className="h-5 w-5" />
                 <span className="text-xs font-medium">Photo</span>
                 <span className="text-[0.6rem] font-bold text-accent">Bientôt</span>
               </button>
 
-              {/* d. Texte */}
               <button
                 type="button"
                 onClick={() => setMediaType("text")}
-                className={`relative flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-2.5 transition-all ${
-                  mediaType === "text"
-                    ? "border-accent bg-accent/10 text-accent"
-                    : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border"
-                }`}
+                className="relative flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-border/60 bg-muted/20 p-2.5 text-muted-foreground opacity-70"
               >
-                <FileText className="h-5 w-5 opacity-70" />
+                <FileText className="h-5 w-5" />
                 <span className="text-xs font-medium">Texte</span>
                 <span className="text-[0.6rem] font-bold text-accent">Bientôt</span>
               </button>
@@ -322,7 +375,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
             </p>
           </div>
 
-          {/* 2. Grand cadre pour toucher, importer et jouer la vidéo */}
+          {/* Import vidéo */}
           {mediaType === "video" || mediaType === "reel" ? (
             <div>
               <input
@@ -337,11 +390,10 @@ function PublishModal({ open, onClose }: PublishModalProps) {
               />
 
               {!videoPreviewUrl ? (
-                /* Grand cadre cliquable pour importer depuis la mémoire */
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className={`group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-background/50 p-8 text-center transition-all hover:border-primary hover:bg-primary/5 active:scale-[0.99] ${
+                  className={`group flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border/80 bg-background/50 p-7 text-center transition-all hover:border-primary hover:bg-primary/5 active:scale-[0.99] ${
                     mediaType === "reel" ? "aspect-[9/12] max-h-72" : "aspect-video max-h-60"
                   }`}
                 >
@@ -352,14 +404,13 @@ function PublishModal({ open, onClose }: PublishModalProps) {
                     Touchez ici pour importer votre {mediaType === "video" ? "vidéo" : "réel"}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Ouvre automatiquement le stockage de votre appareil
+                    Ouvre la galerie ou le stockage de l'appareil
                   </p>
                   <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[0.68rem] font-medium text-muted-foreground">
                     Format MP4, MOV, WebM · Max 60 minutes
                   </span>
                 </button>
               ) : (
-                /* Lecteur vidéo intégré pour prévisualiser et jouer avant publication */
                 <div className="relative overflow-hidden rounded-2xl border border-border bg-black">
                   <video
                     controls
@@ -370,32 +421,44 @@ function PublishModal({ open, onClose }: PublishModalProps) {
                     }`}
                   />
 
-                  {/* Barre d'informations */}
-                  <div className="flex items-center justify-between bg-card/90 px-3 py-2 text-xs border-t border-border">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground truncate max-w-[180px]">
-                        {file?.name}
-                      </span>
-                      {duration !== null && (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[0.68rem] font-bold ${
-                            duration <= 3600
-                              ? "bg-primary/20 text-primary"
-                              : "bg-destructive/20 text-destructive"
-                          }`}
-                        >
-                          ⏱ {formatDuration(duration)} {duration > 3600 && "(Dépasse 60 min !)"}
+                  <div className="flex flex-col gap-1 bg-card/95 px-3.5 py-2.5 text-xs border-t border-border">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <span className="font-medium text-foreground truncate max-w-[170px]">
+                          {file?.name}
                         </span>
-                      )}
+                        {fileSizeMb && (
+                          <span className="rounded bg-muted px-1.5 py-0.2 text-[0.65rem] font-semibold text-muted-foreground">
+                            {fileSizeMb} Mo
+                          </span>
+                        )}
+                        {duration !== null && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[0.68rem] font-bold ${
+                              duration <= 3600
+                                ? "bg-primary/20 text-primary"
+                                : "bg-destructive/20 text-destructive"
+                            }`}
+                          >
+                            ⏱ {formatDuration(duration)}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleReset}
+                        className="inline-flex items-center gap-1 text-[0.72rem] text-muted-foreground hover:text-foreground shrink-0"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span>Changer</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleReset}
-                      className="inline-flex items-center gap-1 text-[0.72rem] text-muted-foreground hover:text-foreground"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      <span>Changer</span>
-                    </button>
+
+                    {isLargeFile && (
+                      <p className="text-[0.68rem] text-accent mt-0.5">
+                        💡 Conseil : Fichier lourd (&gt; 50 Mo). Pour un envoi express, filmez en 720p ou 1080p standard.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -403,16 +466,11 @@ function PublishModal({ open, onClose }: PublishModalProps) {
           ) : (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center">
               <Sparkles className="h-8 w-8 text-accent" />
-              <p className="mt-2 text-sm font-semibold text-foreground">
-                Bientôt disponible !
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground max-w-xs">
-                Les vidéos et réels sont prioritaires pour lancer la dynamique média.
-              </p>
+              <p className="mt-2 text-sm font-semibold text-foreground">Bientôt disponible !</p>
             </div>
           )}
 
-          {/* 3. Titre* et Description */}
+          {/* Titre & Description */}
           <div className="space-y-3">
             <div>
               <label htmlFor="pub-title" className="text-xs font-semibold text-foreground">
@@ -437,7 +495,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
                 id="pub-desc"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Partagez le contexte, les points clés ou les inspirations de votre vidéo..."
+                placeholder="Partagez le contexte ou les points clés de votre vidéo..."
                 disabled={uploading}
                 rows={3}
                 className="mt-1 resize-none"
@@ -445,7 +503,23 @@ function PublishModal({ open, onClose }: PublishModalProps) {
             </div>
           </div>
 
-          {/* Messages alertes */}
+          {/* Barre de progression avec pourcentage réel en direct */}
+          {uploading && (
+            <div className="space-y-1.5 rounded-2xl border border-primary/20 bg-primary/5 p-3.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-primary">
+                <span>{progressText}</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-primary/20">
+                <div
+                  className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Messages */}
           {errorMsg && (
             <div className="flex items-start gap-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive border border-destructive/20">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -461,7 +535,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
           )}
         </div>
 
-        {/* 4. Bouton Publier avec contrôles obligatoires */}
+        {/* Bouton Publier */}
         <div className="border-t border-border/60 bg-card px-5 py-3 flex items-center justify-between gap-3">
           <Button
             type="button"
@@ -489,7 +563,7 @@ function PublishModal({ open, onClose }: PublishModalProps) {
             {uploading ? (
               <span className="flex items-center gap-2">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                {progressText || "Publication en cours…"}
+                <span>Envoi en cours…</span>
               </span>
             ) : (
               `Publier ${mediaType === "reel" ? "le Réel" : "la Vidéo"}`
@@ -501,9 +575,128 @@ function PublishModal({ open, onClose }: PublishModalProps) {
   );
 }
 
+// Modal Réels avec flux vertical interactif
+function ReelsModal({
+  open,
+  onClose,
+  onOpenPublishReel,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onOpenPublishReel: () => void;
+}) {
+  const { data: reels = [], isLoading } = useQuery({
+    queryKey: ["videos", "reel"],
+    queryFn: async (): Promise<VideoPost[]> => {
+      const { data, error } = await supabase
+        .from("videos")
+        .select("id,user_id,author_name,author_serial,author_avatar,type,title,description,video_url,duration_seconds,created_at")
+        .eq("type", "reel")
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Erreur chargement réels:", error);
+        return [];
+      }
+      return (data ?? []) as VideoPost[];
+    },
+    enabled: open,
+  });
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2 sm:p-4 backdrop-blur-md animate-in fade-in duration-200"
+    >
+      <div className="relative flex h-[92vh] w-full max-w-sm flex-col rounded-3xl border border-border/80 bg-card overflow-hidden shadow-2xl">
+        {/* Header Réels */}
+        <div className="flex items-center justify-between border-b border-border/60 px-4 py-3 bg-card/90">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Film className="h-4 w-4" />
+            </span>
+            <h3 className="text-sm font-bold text-foreground">Espace Réels</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Liste verticale des Réels */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-4">
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center text-xs text-muted-foreground animate-pulse">
+              Chargement des Réels...
+            </div>
+          ) : reels.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <Film className="h-7 w-7" />
+              </div>
+              <h4 className="text-sm font-bold text-foreground">Aucun Réel pour le moment</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Soyez le premier membre vérifié à publier un Réel vertical pour la communauté !
+              </p>
+              <Button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenPublishReel();
+                }}
+                className="mt-2 rounded-xl bg-gradient-to-r from-primary to-accent font-semibold text-white text-xs"
+              >
+                Publier un Réel
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {reels.map((reel) => (
+                <div
+                  key={reel.id}
+                  className="relative overflow-hidden rounded-2xl border border-border bg-black aspect-[9/15]"
+                >
+                  <video
+                    controls
+                    playsInline
+                    preload="metadata"
+                    src={reel.video_url}
+                    className="h-full w-full object-cover"
+                  />
+                  {/* Overlay bas avec auteur et titre */}
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-3 text-white">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold">{reel.author_name}</span>
+                      {reel.author_serial && (
+                        <span className="rounded bg-primary/80 px-1.5 py-0.2 text-[0.62rem] font-bold text-white">
+                          {reel.author_serial}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold mt-1 line-clamp-1">{reel.title}</p>
+                    {reel.description && (
+                      <p className="text-[0.68rem] text-white/80 line-clamp-2 mt-0.5">{reel.description}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Footer() {
   const [showReelsModal, setShowReelsModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishDefaultType, setPublishDefaultType] = useState<MediaType>("video");
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
@@ -566,11 +759,14 @@ export function Footer() {
             </button>
           </li>
 
-          {/* 3. Publier (bouton central mis en valeur) */}
+          {/* 3. Publier */}
           <li className="flex-1">
             <button
               type="button"
-              onClick={() => setShowPublishModal(true)}
+              onClick={() => {
+                setPublishDefaultType("video");
+                setShowPublishModal(true);
+              }}
               className="group flex w-full flex-col items-center gap-1 py-1 text-[0.7rem] font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               <span className="relative -mt-3 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-primary to-accent text-white shadow-lg shadow-primary/30 transition-transform active:scale-95 group-hover:scale-105">
@@ -619,38 +815,20 @@ export function Footer() {
         </ul>
       </nav>
 
-      {/* Modal Réels */}
-      {showReelsModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-200"
-        >
-          <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <svg viewBox="0 0 24 24" className="h-7 w-7 fill-none" stroke="currentColor" strokeWidth={1.8}>
-                <rect x="2" y="2" width="20" height="20" rx="4" />
-                <path d="m10 9 6 3-6 3V9z" fill="currentColor" />
-              </svg>
-            </div>
-            <h3 className="mt-4 text-base font-bold text-foreground">Section Réels</h3>
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              L'espace vidéo courte arrive très bientôt. Vous pourrez y découvrir les Réels des membres vérifiés.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowReelsModal(false)}
-              className="mt-5 w-full rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              Compris
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Modal Réels interactif */}
+      <ReelsModal
+        open={showReelsModal}
+        onClose={() => setShowReelsModal(false)}
+        onOpenPublishReel={() => {
+          setPublishDefaultType("reel");
+          setShowPublishModal(true);
+        }}
+      />
 
       {/* Modal Publier */}
       <PublishModal
         open={showPublishModal}
+        defaultType={publishDefaultType}
         onClose={() => setShowPublishModal(false)}
       />
     </>
