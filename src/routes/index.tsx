@@ -736,17 +736,28 @@ function VideoCard({
       </div>
 
       <div className="relative aspect-video w-full bg-black">
-        <video
-          controls
-          playsInline
-          preload="metadata"
-          src={video.video_url}
-          onTimeUpdate={handleTimeUpdate}
-          onSeeked={handleSeeked}
-          onPause={handlePause}
-          onPlay={handlePlay}
-          className="h-full w-full object-contain bg-black"
-        />
+        
+<video
+  controls
+  playsInline
+  loop
+  preload="metadata"
+  src={video.video_url}
+  onTimeUpdate={handleTimeUpdate}
+  onSeeked={handleSeeked}
+  onPause={handlePause}
+  onPlay={(e) => {
+    handlePlay(e);
+
+    // Pause every other video when this one starts.
+    document.querySelectorAll("video").forEach((otherVideo) => {
+      if (otherVideo !== e.currentTarget && !otherVideo.paused) {
+        otherVideo.pause();
+      }
+    });
+  }}
+  className="h-full w-full object-contain bg-black"
+/>
         {video.duration_seconds !== null && video.duration_seconds > 0 && (
           <span className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/80 px-2 py-0.5 text-[0.68rem] font-bold text-white backdrop-blur-sm">
             ⏱ {formatDuration(video.duration_seconds)}
