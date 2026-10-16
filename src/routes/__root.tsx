@@ -39,6 +39,7 @@ type PersistentHomeVideoDetail = {
   accumulatedWatchTime: number;
   viewRegistered: boolean;
 };
+
 function PersistentHomeVideoPlayer() {
   const queryClient = useQueryClient();
 
@@ -61,6 +62,10 @@ function PersistentHomeVideoPlayer() {
   const viewRegisteredRef = useRef(false);
   const requestInProgressRef = useRef(false);
 
+  // Pinch-to-zoom
+  const initialPinchDistanceRef = useRef<number | null>(null);
+  const initialWidthRef = useRef(320);
+
   // Receive playback handoff events from VideoCard.
   useEffect(() => {
     const handleStart = (event: Event) => {
@@ -69,11 +74,7 @@ function PersistentHomeVideoPlayer() {
 
       const detail = customEvent.detail;
 
-      if (
-        !detail ||
-        !detail.id ||
-        !detail.videoUrl
-      ) {
+      if (!detail || !detail.id || !detail.videoUrl) {
         return;
       }
 
@@ -92,8 +93,7 @@ function PersistentHomeVideoPlayer() {
       accumulatedWatchTimeRef.current =
         Math.max(0, detail.accumulatedWatchTime || 0);
 
-      viewRegisteredRef.current =
-        Boolean(detail.viewRegistered);
+      viewRegisteredRef.current = Boolean(detail.viewRegistered);
 
       requestInProgressRef.current = false;
       lastTimeRef.current = null;
@@ -111,26 +111,12 @@ function PersistentHomeVideoPlayer() {
       setVideo(null);
     };
 
-    window.addEventListener(
-      "lf:persistent-video-start",
-      handleStart
-    );
-
-    window.addEventListener(
-      "lf:persistent-video-close",
-      handleClose
-    );
+    window.addEventListener("lf:persistent-video-start", handleStart);
+    window.addEventListener("lf:persistent-video-close", handleClose);
 
     return () => {
-      window.removeEventListener(
-        "lf:persistent-video-start",
-        handleStart
-      );
-
-      window.removeEventListener(
-        "lf:persistent-video-close",
-        handleClose
-      );
+      window.removeEventListener("lf:persistent-video-start", handleStart);
+      window.removeEventListener("lf:persistent-video-close", handleClose);
     };
   }, []);
 
@@ -157,9 +143,8 @@ function PersistentHomeVideoPlayer() {
 
       lastTimeRef.current = playerVideo.currentTime;
 
-      // Autoplay may be blocked by the browser; controls remain available.
       void playerVideo.play().catch(() => {
-        // The user can press Play if automatic playback is blocked.
+        // Autoplay may be blocked
       });
     };
 
@@ -181,53 +166,89 @@ function PersistentHomeVideoPlayer() {
     };
   }, [video?.id, video?.videoUrl]);
 
-  // Keep the floating player inside the visible screen while dragging.
+  // Drag + Pinch-to-zoom
   useEffect(() => {
-    if (!isDragging) {
+    if (!isDragging && initialPinchDistanceRef.current === null) {
       return;
     }
 
-    const handlePointerMove = (event: PointerEvent) => {
-      const playerElement = playerRef.current;
+    const handlePointerMove = (event: PointerEvent | TouchEvent) => {
+      // --- Pinch (2 doigts) ---
+      if (
+        initialPinchDistanceRef.current !== null &&
+        "touches" in event &&
+        event.touches.length === 2
+      ) {
+        event.preventDefault(); // empêche le scroll de la page
 
-      if (!playerElement) {
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+        const distance = Math.hypot(
+          touch2.clientX - touch1.clientX,
+          touch2.clientY - touch1.clientY
+        );
+
+        const scale = distance / initialPinchDistanceRef.current;
+        const newWidth = Math.min(
+          480,
+          Math.max(200, initialWidthRef.current * scale)
+        );
+        setPlayerWidth(newWidth);
         return;
       }
 
+      // --- Drag normal ---
+      if (!isDragging) return;
+
+      const playerElement = playerRef.current;
+      if (!playerElement) return;
+
+      const clientX =
+        "clientX" in event
+          ? event.clientX
+          : event.touches?.[0]?.clientX ?? 0;
+      const clientY =
+        "clientY" in event
+          ? event.clientY
+          : event.touches?.[0]?.clientY ?? 0;
+
       const rect = playerElement.getBoundingClientRect();
-      const maxLeft = Math.max(
-        8,
-        window.innerWidth - rect.width - 8
-      );
-      const maxTop = Math.max(
-        8,
-        window.innerHeight - rect.height - 8
-      );
+      const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
+      const maxTop = Math.max(8, window.innerHeight - rect.height - 8);
 
       setPosition({
         left: Math.min(
           maxLeft,
-          Math.max(8, event.clientX - dragOffsetRef.current.x)
+          Math.max(8, clientX - dragOffsetRef.current.x)
         ),
         top: Math.min(
           maxTop,
-          Math.max(8, event.clientY - dragOffsetRef.current.y)
+          Math.max(8, clientY - dragOffsetRef.current.y)
         ),
       });
     };
 
     const handlePointerUp = () => {
       setIsDragging(false);
+      initialPinchDistanceRef.current = null;
     };
 
     window.addEventListener("pointermove", handlePointerMove);
     window.addEventListener("pointerup", handlePointerUp);
     window.addEventListener("pointercancel", handlePointerUp);
+    window.addEventListener("touchmove", handlePointerMove as any, {
+      passive: false,
+    });
+    window.addEventListener("touchend", handlePointerUp);
+    window.addEventListener("touchcancel", handlePointerUp);
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
       window.removeEventListener("pointercancel", handlePointerUp);
+      window.removeEventListener("touchmove", handlePointerMove as any);
+      window.removeEventListener("touchend", handlePointerUp);
+      window.removeEventListener("touchcancel", handlePointerUp);
     };
   }, [isDragging]);
 
@@ -289,7 +310,6 @@ function PersistentHomeVideoPlayer() {
     ) {
       const delta = currentTime - previousTime;
 
-      // Ignore seeking, backward playback and unusually large jumps.
       if (delta > 0 && delta < 1.5) {
         accumulatedWatchTimeRef.current += delta;
         registerQualifiedView();
@@ -306,14 +326,10 @@ function PersistentHomeVideoPlayer() {
 
     lastTimeRef.current = currentVideo.currentTime;
 
-    // Never allow another video to play at the same time.
     document
       .querySelectorAll<HTMLVideoElement>("video")
       .forEach((otherVideo) => {
-        if (
-          otherVideo !== currentVideo &&
-          !otherVideo.paused
-        ) {
+        if (otherVideo !== currentVideo && !otherVideo.paused) {
           otherVideo.pause();
         }
       });
@@ -323,18 +339,36 @@ function PersistentHomeVideoPlayer() {
     lastTimeRef.current = null;
   };
 
-  const handleDragStart = (
+  const handlePointerDown = (
     event: React.PointerEvent<HTMLDivElement>
   ) => {
     if ((event.target as HTMLElement).closest("button")) {
       return;
     }
 
-    const rect = playerRef.current?.getBoundingClientRect();
+    const playerElement = playerRef.current;
+    if (!playerElement) return;
 
-    if (!rect) {
+    // Détection pinch (2 doigts)
+    if (
+      event.pointerType === "touch" &&
+      (event.nativeEvent as any).touches?.length === 2
+    ) {
+      const touches = (event.nativeEvent as any).touches;
+      const touch1 = touches[0];
+      const touch2 = touches[1];
+      const distance = Math.hypot(
+        touch2.clientX - touch1.clientX,
+        touch2.clientY - touch1.clientY
+      );
+
+      initialPinchDistanceRef.current = distance;
+      initialWidthRef.current = playerWidth;
       return;
     }
+
+    // Drag normal
+    const rect = playerElement.getBoundingClientRect();
 
     dragOffsetRef.current = {
       x: event.clientX - rect.left,
@@ -377,10 +411,11 @@ function PersistentHomeVideoPlayer() {
         touchAction: isDragging ? "none" : "auto",
       }}
       aria-label="Lecteur vidéo flottant"
+      onPointerDown={handlePointerDown}
     >
+      {/* Header déplaçable */}
       <div
         className="flex cursor-move items-center justify-between gap-2 border-b border-border bg-background px-3 py-2"
-        onPointerDown={handleDragStart}
         style={{ touchAction: "none" }}
       >
         <div className="min-w-0 flex-1">
@@ -393,32 +428,6 @@ function PersistentHomeVideoPlayer() {
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-sm hover:bg-accent"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() =>
-              setPlayerWidth((width) => Math.max(220, width - 40))
-            }
-            aria-label="Réduire la taille du lecteur"
-            title="Réduire"
-          >
-            −
-          </button>
-
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-sm hover:bg-accent"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() =>
-              setPlayerWidth((width) => Math.min(480, width + 40))
-            }
-            aria-label="Agrandir le lecteur"
-            title="Agrandir"
-          >
-            +
-          </button>
-
           <button
             type="button"
             className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-sm hover:bg-destructive hover:text-destructive-foreground"
@@ -434,7 +443,7 @@ function PersistentHomeVideoPlayer() {
 
       <video
         ref={videoRef}
-        key={`${video.id}:${video.videoUrl}`}
+        key={`\( {video.id}: \){video.videoUrl}`}
         data-lf-persistent-home-video="true"
         data-lf-video-id={video.id}
         src={video.videoUrl}
@@ -453,22 +462,6 @@ function PersistentHomeVideoPlayer() {
         className="block aspect-video w-full bg-black object-contain"
         aria-label={video.title}
       />
-
-      <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="truncate text-[0.68rem] text-muted-foreground">
-          Lecture en arrière-plan de navigation
-        </span>
-
-        <Link
-          to="/"
-          onClick={() => {
-            // Keep the player open when returning to the home page.
-          }}
-          className="shrink-0 text-xs font-semibold text-primary hover:underline"
-        >
-          Accueil
-        </Link>
-      </div>
     </div>
   );
 }
