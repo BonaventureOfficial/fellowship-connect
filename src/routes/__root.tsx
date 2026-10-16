@@ -1,3 +1,4 @@
+
 import {
   Outlet,
   Link,
@@ -41,8 +42,11 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
+
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportLovableError(error, {
+      boundary: "tanstack_root_error_component",
+    });
   }, [error]);
 
   return (
@@ -76,19 +80,26 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   );
 }
 
-export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+}>()({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Living Fellowship — Gestion des membres" },
+      {
+        title: "Living Fellowship — Gestion des membres",
+      },
       {
         name: "description",
         content:
           "Living Fellowship : plateforme de gestion des membres de l'entreprise. Personalié, Potentialité, Prosperité.",
       },
       { name: "author", content: "Living Fellowship" },
-      { property: "og:title", content: "Living Fellowship — Gestion des membres" },
+      {
+        property: "og:title",
+        content: "Living Fellowship — Gestion des membres",
+      },
       {
         property: "og:description",
         content:
@@ -98,20 +109,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@LivingFellowship" },
       { name: "theme-color", content: "#0B0616" },
-      { name: "apple-mobile-web-app-capable", content: "yes" },
+      {
+        name: "apple-mobile-web-app-capable",
+        content: "yes",
+      },
       { name: "mobile-web-app-capable", content: "yes" },
       {
         name: "apple-mobile-web-app-status-bar-style",
         content: "black-translucent",
       },
-      { name: "apple-mobile-web-app-title", content: "Living Fellowship" },
-      { name: "application-name", content: "Living Fellowship" },
+      {
+        name: "apple-mobile-web-app-title",
+        content: "Living Fellowship",
+      },
+      {
+        name: "application-name",
+        content: "Living Fellowship",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "manifest", href: "/manifest.webmanifest" },
-      { rel: "icon", type: "image/png", sizes: "192x192", href: "/favicon.png" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "192x192",
+        href: "/favicon.png",
+      },
+      {
+        rel: "apple-touch-icon",
+        href: "/apple-touch-icon.png",
+      },
       {
         rel: "preconnect",
         href: "https://fonts.googleapis.com",
@@ -126,7 +154,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
       },
     ],
-
   }),
   shellComponent: RootShell,
   component: RootComponent,
