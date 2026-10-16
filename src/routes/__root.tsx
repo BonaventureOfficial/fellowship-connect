@@ -12,22 +12,21 @@ import {
   QueryClientProvider,
   useQueryClient,
 } from "@tanstack/react-query";
-import {
+import React, {
   useEffect,
   useRef,
   useState,
+  useCallback,
   type ReactNode,
 } from "react";
-
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Footer } from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 
 // -----------------------------------------------------------------------------
-// Persistent home-video player
+// Persistent home-video player (Architecture PiP Pro)
 // -----------------------------------------------------------------------------
-
 type PersistentHomeVideoDetail = {
   id: string;
   title: string;
@@ -40,50 +39,54 @@ type PersistentHomeVideoDetail = {
   viewRegistered: boolean;
 };
 
-export function PersistentHomeVideoPlayer() {
+function PersistentHomeVideoPlayer() {
   const queryClient = useQueryClient();
-
   const [video, setVideo] = useState<PersistentHomeVideoDetail | null>(null);
+
   const [playerWidth, setPlayerWidth] = useState(320);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
-  const [isInteracting, setIsInteracting] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [showPlayOverlay, setShowPlayOverlay] = useState(false);
 
   const playerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // État de lecture & analytics
+  // Données de lecture & analytics
   const lastTimeRef = useRef<number | null>(null);
   const accumulatedWatchTimeRef = useRef(0);
   const viewRegisteredRef = useRef(false);
   const requestInProgressRef = useRef(false);
 
-  // Refs de manipulation tactile & souris
-  const playerWidthRef = useRef(320);
-  playerWidthRef.current = playerWidth;
-
-  const positionRef = useRef<{ left: number; top: number } | null>(null);
-  positionRef.current = position;
-
-  const dragStartRef = useRef<{ x: number; y: number; originLeft: number; originTop: number }>({
-    x: 0,
-    y: 0,
+  // Suivi temps réel hors state React pour 0 lag et 0 coupure
+  const gestureRef = useRef({
+    isActive: false,
+    isPinch: false,
+    hasMoved: false,
+    startX: 0,
+    startY: 0,
     originLeft: 0,
     originTop: 0,
+    deltaX: 0,
+    deltaY: 0,
+    startDist: 0,
+    startWidth: 320,
+    currentScale: 1,
+    suppressTapUntil: 0,
   });
 
-  const pinchStartRef = useRef<{ distance: number; startWidth: number } | null>(null);
-  const hasMovedSignificantlyRef = useRef(false);
-  const suppressClickUntilRef = useRef(0);
+  const widthRef = useRef(320);
+  widthRef.current = playerWidth;
 
-  // Écoute des événements personnalisés d'ouverture / fermeture
+  const posRef = useRef<{ left: number; top: number } | null>(null);
+  posRef.current = position;
+
+  // Réception des événements de lecture persistante
   useEffect(() => {
     const handleStart = (event: Event) => {
       const customEvent = event as CustomEvent<PersistentHomeVideoDetail>;
       const detail = customEvent.detail;
+      if (!detail || !detail.id || !detail.videoUrl) return;
 
-      if (!detail?.id || !detail.videoUrl) return;
-
-      // Arrête les autres vidéos de la page
       document.querySelectorAll<HTMLVideoElement>("video").forEach((otherVideo) => {
         if (otherVideo.dataset.lfPersistentHomeVideo !== "true" && !otherVideo.paused) {
           otherVideo.pause();
@@ -94,7 +97,7 @@ export function PersistentHomeVideoPlayer() {
       viewRegisteredRef.current = Boolean(detail.viewRegistered);
       requestInProgressRef.current = false;
       lastTimeRef.current = null;
-
+      setIsPlaying(true);
       setVideo(detail);
     };
 
@@ -103,7 +106,6 @@ export function PersistentHomeVideoPlayer() {
         videoRef.current.pause();
       }
       lastTimeRef.current = null;
-      setIsInteracting(false);
       setVideo(null);
     };
 
@@ -116,7 +118,7 @@ export function PersistentHomeVideoPlayer() {
     };
   }, []);
 
-  // Reprise automatique du timing
+  // Reprise du timing
   useEffect(() => {
     const playerVideo = videoRef.current;
     if (!video || !playerVideo) return;
@@ -124,15 +126,13 @@ export function PersistentHomeVideoPlayer() {
     const handleLoadedMetadata = () => {
       const requestedTime = Math.max(0, video.currentTime || 0);
       const duration = playerVideo.duration;
-
       if (Number.isFinite(duration) && duration > 0) {
         playerVideo.currentTime = Math.min(requestedTime, Math.max(0, duration - 0.1));
       } else {
         playerVideo.currentTime = requestedTime;
       }
-
       lastTimeRef.current = playerVideo.currentTime;
-      void playerVideo.play().catch(() => {});
+      void playerVideo.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
     };
 
     playerVideo.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });
@@ -145,10 +145,10 @@ export function PersistentHomeVideoPlayer() {
     };
   }, [video?.id, video?.videoUrl]);
 
-  // Helper pour garder le lecteur dans les limites de l'écran
-  const clampPosition = useCallback((left: number, top: number, width: number) => {
+  // Délimitation dans la fenêtre
+  const clampBounds = useCallback((left: number, top: number, width: number) => {
     const player = playerRef.current;
-    const height = player ? player.getBoundingClientRect().height : (width * 9) / 16 + 48;
+    const height = player ? player.getBoundingClientRect().height : (width * 9) / 16 + 44;
     const maxLeft = Math.max(8, window.innerWidth - width - 8);
     const maxTop = Math.max(8, window.innerHeight - height - 8);
 
@@ -158,184 +158,227 @@ export function PersistentHomeVideoPlayer() {
     };
   }, []);
 
-  // Gestion des événements tactiles : Drag partout & Pinch-to-zoom à 2 doigts doux
+  // Gestion Tactile Haute Performance : 2 doigts (pinch) et 1 doigt (drag)
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
 
-    const handleTouchStart = (e: TouchEvent) => {
+    const onTouchStart = (e: TouchEvent) => {
       if ((e.target as HTMLElement).closest("button")) return;
 
       const rect = player.getBoundingClientRect();
-      const currentLeft = positionRef.current?.left ?? rect.left;
-      const currentTop = positionRef.current?.top ?? rect.top;
+      const curLeft = posRef.current?.left ?? rect.left;
+      const curTop = posRef.current?.top ?? rect.top;
 
-      hasMovedSignificantlyRef.current = false;
+      const g = gestureRef.current;
+      g.isActive = true;
+      g.hasMoved = false;
+      g.deltaX = 0;
+      g.deltaY = 0;
+      g.originLeft = curLeft;
+      g.originTop = curTop;
+      g.currentScale = 1;
 
-      // 1. PINCH : Détection directe de 2 doigts
       if (e.touches.length === 2) {
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        const dist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
-
-        pinchStartRef.current = {
-          distance: Math.max(10, dist),
-          startWidth: playerWidthRef.current,
-        };
-        setIsInteracting(true);
-        return;
-      }
-
-      // 2. DRAG : 1 doigt n'importe où
-      if (e.touches.length === 1) {
-        pinchStartRef.current = null;
-        const touch = e.touches[0];
-        dragStartRef.current = {
-          x: touch.clientX,
-          y: touch.clientY,
-          originLeft: currentLeft,
-          originTop: currentTop,
-        };
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      // Pinch-to-zoom à 2 doigts doux
-      if (e.touches.length === 2 && pinchStartRef.current) {
-        e.preventDefault(); // Empêche le zoom du navigateur web
-
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        const currentDist = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
-
-        const ratio = currentDist / pinchStartRef.current.distance;
-        // Lissage doux du facteur d'échelle
-        const targetWidth = pinchStartRef.current.startWidth * ratio;
-
-        const minWidth = 200;
-        const maxWidth = Math.min(window.innerWidth - 16, 520);
-        const newWidth = Math.round(Math.min(maxWidth, Math.max(minWidth, targetWidth)));
-
-        setPlayerWidth(newWidth);
-        hasMovedSignificantlyRef.current = true;
-        return;
-      }
-
-      // Déplacement à 1 doigt n'importe où
-      if (e.touches.length === 1 && !pinchStartRef.current) {
-        const touch = e.touches[0];
-        const deltaX = touch.clientX - dragStartRef.current.x;
-        const deltaY = touch.clientY - dragStartRef.current.y;
-
-        // Seuil d'activation pour distinguer le tap du drag
-        if (!hasMovedSignificantlyRef.current && Math.hypot(deltaX, deltaY) > 6) {
-          hasMovedSignificantlyRef.current = true;
-          setIsInteracting(true);
-        }
-
-        if (hasMovedSignificantlyRef.current) {
-          e.preventDefault(); // Empêche le scroll de la page sous le lecteur
-
-          const nextLeft = dragStartRef.current.originLeft + deltaX;
-          const nextTop = dragStartRef.current.originTop + deltaY;
-          const clamped = clampPosition(nextLeft, nextTop, playerWidthRef.current);
-
-          setPosition(clamped);
-        }
-      }
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length === 0) {
-        if (hasMovedSignificantlyRef.current) {
-          // Neutralise les clics résiduels pour éviter de mettre la vidéo en pause
-          suppressClickUntilRef.current = Date.now() + 400;
-        }
-        pinchStartRef.current = null;
-        setIsInteracting(false);
+        g.isPinch = true;
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        g.startDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        g.startWidth = widthRef.current;
+        g.startX = (t1.clientX + t2.clientX) / 2;
+        g.startY = (t1.clientY + t2.clientY) / 2;
       } else if (e.touches.length === 1) {
-        // Un doigt a été levé après un pinch
-        pinchStartRef.current = null;
-        const touch = e.touches[0];
-        const rect = player.getBoundingClientRect();
-        dragStartRef.current = {
-          x: touch.clientX,
-          y: touch.clientY,
-          originLeft: positionRef.current?.left ?? rect.left,
-          originTop: positionRef.current?.top ?? rect.top,
-        };
+        g.isPinch = false;
+        g.startX = e.touches[0].clientX;
+        g.startY = e.touches[0].clientY;
       }
     };
 
-    player.addEventListener("touchstart", handleTouchStart, { passive: true });
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    window.addEventListener("touchend", handleTouchEnd, { passive: true });
-    window.addEventListener("touchcancel", handleTouchEnd, { passive: true });
+    const onTouchMove = (e: TouchEvent) => {
+      const g = gestureRef.current;
+      if (!g.isActive) return;
+
+      // Empêche le défilement de la page arrière
+      e.preventDefault();
+
+      const minW = 200;
+      const maxW = Math.min(window.innerWidth - 16, 540);
+
+      if (e.touches.length === 2) {
+        // Geste à 2 doigts : Pinch-to-zoom
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+        if (!g.isPinch) {
+          g.isPinch = true;
+          g.startDist = curDist;
+          g.startWidth = widthRef.current;
+          g.startX = (t1.clientX + t2.clientX) / 2;
+          g.startY = (t1.clientY + t2.clientY) / 2;
+        }
+
+        if (g.startDist > 10) {
+          const rawScale = curDist / g.startDist;
+          const targetW = g.startWidth * rawScale;
+          const clampedW = Math.min(maxW, Math.max(minW, targetW));
+          g.currentScale = clampedW / g.startWidth;
+
+          const midX = (t1.clientX + t2.clientX) / 2;
+          const midY = (t1.clientY + t2.clientY) / 2;
+          g.deltaX = midX - g.startX;
+          g.deltaY = midY - g.startY;
+          g.hasMoved = true;
+
+          // Rendu GPU direct : 0 reflow = lecture continue sans saccade
+          player.style.transform = `translate3d(${g.deltaX}px, ${g.deltaY}px, 0) scale(${g.currentScale})`;
+          player.style.transformOrigin = "center center";
+          player.style.transition = "none";
+        }
+      } else if (e.touches.length === 1 && !g.isPinch) {
+        // Geste à 1 doigt : Drag
+        const curX = e.touches[0].clientX;
+        const curY = e.touches[0].clientY;
+        const dX = curX - g.startX;
+        const dY = curY - g.startY;
+
+        if (!g.hasMoved && Math.hypot(dX, dY) > 6) {
+          g.hasMoved = true;
+        }
+
+        if (g.hasMoved) {
+          g.deltaX = dX;
+          g.deltaY = dY;
+          player.style.transform = `translate3d(${g.deltaX}px, ${g.deltaY}px, 0)`;
+          player.style.transition = "none";
+        }
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      const g = gestureRef.current;
+      if (!g.isActive) return;
+
+      if (e.touches.length === 0) {
+        g.isActive = false;
+
+        if (g.hasMoved) {
+          g.suppressTapUntil = Date.now() + 350;
+
+          const finalW = Math.round(widthRef.current * (g.isPinch ? g.currentScale : 1));
+          const targetLeft = g.originLeft + g.deltaX - (finalW - widthRef.current) / 2;
+          const targetTop = g.originTop + g.deltaY;
+          const clamped = clampBounds(targetLeft, targetTop, finalW);
+
+          // Réinitialisation du transform GPU et synchronisation
+          player.style.transform = "";
+          player.style.transition = "";
+
+          setPlayerWidth(finalW);
+          setPosition(clamped);
+        } else {
+          // Si les doigts n'ont pas bougé : Tap Play/Pause
+          if (Date.now() > g.suppressTapUntil) {
+            togglePlayPause();
+          }
+        }
+      } else if (e.touches.length === 1 && g.isPinch) {
+        g.isPinch = false;
+        g.startX = e.touches[0].clientX;
+        g.startY = e.touches[0].clientY;
+      }
+    };
+
+    player.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
     return () => {
-      player.removeEventListener("touchstart", handleTouchStart);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("touchend", handleTouchEnd);
-      window.removeEventListener("touchcancel", handleTouchEnd);
+      player.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [clampPosition]);
+  }, [clampBounds]);
 
-  // Support Souris (Desktop) pour le drag
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Support Souris sur ordinateur
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest("button")) return;
 
     const player = playerRef.current;
     if (!player) return;
 
     const rect = player.getBoundingClientRect();
-    const currentLeft = positionRef.current?.left ?? rect.left;
-    const currentTop = positionRef.current?.top ?? rect.top;
+    const curLeft = posRef.current?.left ?? rect.left;
+    const curTop = posRef.current?.top ?? rect.top;
 
     const startX = e.clientX;
     const startY = e.clientY;
-    let moved = false;
+    let hasMoved = false;
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const deltaY = moveEvent.clientY - startY;
+    const onMouseMove = (ev: MouseEvent) => {
+      const dX = ev.clientX - startX;
+      const dY = ev.clientY - startY;
 
-      if (!moved && Math.hypot(deltaX, deltaY) > 4) {
-        moved = true;
-        setIsInteracting(true);
-        hasMovedSignificantlyRef.current = true;
+      if (!hasMoved && Math.hypot(dX, dY) > 5) {
+        hasMoved = true;
       }
 
-      if (moved) {
-        const nextLeft = currentLeft + deltaX;
-        const nextTop = currentTop + deltaY;
-        setPosition(clampPosition(nextLeft, nextTop, playerWidthRef.current));
+      if (hasMoved) {
+        player.style.transform = `translate3d(${dX}px, ${dY}px, 0)`;
+        player.style.transition = "none";
       }
     };
 
-    const handleMouseUp = () => {
-      if (moved) {
-        suppressClickUntilRef.current = Date.now() + 300;
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+
+      if (hasMoved) {
+        gestureRef.current.suppressTapUntil = Date.now() + 300;
+        const dX = gestureRef.current.deltaX;
+        const dY = gestureRef.current.deltaY;
+        const clamped = clampBounds(curLeft + dX, curTop + dY, widthRef.current);
+
+        player.style.transform = "";
+        player.style.transition = "";
+        setPosition(clamped);
+      } else {
+        if (Date.now() > gestureRef.current.suppressTapUntil) {
+          togglePlayPause();
+        }
       }
-      setIsInteracting(false);
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
   };
 
-  // Fermeture du lecteur
-  const closePlayer = () => {
+  // Bascule Play/Pause au tap
+  const togglePlayPause = () => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    if (v.paused) {
+      void v.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else {
+      v.pause();
+      setIsPlaying(false);
+    }
+    setShowPlayOverlay(true);
+    setTimeout(() => setShowPlayOverlay(false), 900);
+  };
+
+  const closePlayer = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (videoRef.current) {
       videoRef.current.pause();
     }
     lastTimeRef.current = null;
-    setIsInteracting(false);
     setVideo(null);
   };
 
-  // Comptabilisation des vues qualifiées
   const registerQualifiedView = () => {
     if (
       !video ||
@@ -346,9 +389,7 @@ export function PersistentHomeVideoPlayer() {
     ) {
       return;
     }
-
     requestInProgressRef.current = true;
-
     supabase
       .rpc("record_video_view", { p_video_id: video.id })
       .then(({ error }) => {
@@ -366,7 +407,6 @@ export function PersistentHomeVideoPlayer() {
     const playerVideo = event.currentTarget;
     const currentTime = playerVideo.currentTime;
     const previousTime = lastTimeRef.current;
-
     if (previousTime !== null && !playerVideo.paused && !playerVideo.seeking) {
       const delta = currentTime - previousTime;
       if (delta > 0 && delta < 1.5) {
@@ -380,7 +420,7 @@ export function PersistentHomeVideoPlayer() {
   const handlePlay = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     const currentVideo = event.currentTarget;
     lastTimeRef.current = currentVideo.currentTime;
-
+    setIsPlaying(true);
     document.querySelectorAll<HTMLVideoElement>("video").forEach((otherVideo) => {
       if (otherVideo !== currentVideo && !otherVideo.paused) {
         otherVideo.pause();
@@ -390,6 +430,7 @@ export function PersistentHomeVideoPlayer() {
 
   const handlePause = () => {
     lastTimeRef.current = null;
+    setIsPlaying(false);
   };
 
   if (!video) return null;
@@ -397,17 +438,8 @@ export function PersistentHomeVideoPlayer() {
   return (
     <div
       ref={playerRef}
-      onMouseDown={handleMouseDown}
-      onClickCapture={(e) => {
-        // Empêche de déclencher play/pause si on vient de déplacer ou zoomer le lecteur
-        if (Date.now() < suppressClickUntilRef.current) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
-      }}
-      className={`fixed z-[100] overflow-hidden rounded-2xl border border-primary/40 bg-card shadow-2xl select-none transition-shadow ${
-        isInteracting ? "shadow-primary/20 scale-[1.01]" : ""
-      }`}
+      onMouseDown={onMouseDown}
+      className="fixed z-[100] overflow-hidden rounded-2xl border border-primary/40 bg-card shadow-2xl select-none"
       style={{
         width: `${playerWidth}px`,
         maxWidth: "calc(100vw - 16px)",
@@ -416,14 +448,15 @@ export function PersistentHomeVideoPlayer() {
         left: position ? `${position.left}px` : undefined,
         top: position ? `${position.top}px` : undefined,
         touchAction: "none",
-        cursor: isInteracting ? "grabbing" : "grab",
+        cursor: "grab",
+        willChange: "transform, width",
       }}
       aria-label="Lecteur vidéo flottant"
     >
-      {/* Barre supérieure épurée : Titre, Auteur et bouton Fermer uniquement */}
-      <div className="flex items-center justify-between gap-2 border-b border-border/80 bg-background/95 backdrop-blur-md px-3 py-2">
+      {/* Barre supérieure épurée */}
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-background px-3 py-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-bold text-foreground leading-tight">
+          <p className="truncate text-xs font-bold text-foreground">
             {video.title}
           </p>
           {video.authorName && (
@@ -432,27 +465,27 @@ export function PersistentHomeVideoPlayer() {
             </p>
           )}
         </div>
-
-        <button
-          type="button"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-sm font-semibold transition hover:bg-destructive hover:text-destructive-foreground active:scale-95"
-          onClick={closePlayer}
-          aria-label="Fermer le lecteur"
-          title="Fermer"
-        >
-          ✕
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-sm hover:bg-destructive hover:text-destructive-foreground transition-colors cursor-pointer"
+            onClick={closePlayer}
+            aria-label="Fermer le lecteur"
+            title="Fermer"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
-      {/* Vidéo plein cadre dans la mini-lecture */}
-      <div className="relative aspect-video w-full bg-black">
+      {/* Surface Vidéo avec Déplacement libre et Pinch-to-zoom 2 doigts */}
+      <div className="relative aspect-video w-full bg-black overflow-hidden">
         <video
           ref={videoRef}
           key={`${video.id}:${video.videoUrl}`}
           data-lf-persistent-home-video="true"
           data-lf-video-id={video.id}
           src={video.videoUrl}
-          controls
           playsInline
           loop
           preload="metadata"
@@ -464,21 +497,98 @@ export function PersistentHomeVideoPlayer() {
           }}
           onPause={handlePause}
           onPlay={handlePlay}
-          className={`block h-full w-full object-contain ${
-            isInteracting ? "pointer-events-none" : "pointer-events-auto"
-          }`}
+          className="block h-full w-full object-contain pointer-events-none"
           aria-label={video.title}
         />
+
+        {/* Indicateur visuel Play/Pause au simple tap */}
+        {showPlayOverlay && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none transition-opacity">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-background/80 text-foreground text-xl shadow-lg">
+              {isPlaying ? "▶" : "❚❚"}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// -----------------------------------------------------------------------------
+// Not found page
+// -----------------------------------------------------------------------------
+function NotFoundComponent() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-7xl font-bold text-foreground">404</h1>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">
+          Page introuvable
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          La page que vous cherchez n'existe pas ou a été déplacée.
+        </p>
+        <div className="mt-6">
+          <Link
+            to="/"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Retour à l'accueil
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Error page
+// -----------------------------------------------------------------------------
+function ErrorComponent({
+  error,
+  reset,
+}: ErrorComponentProps) {
+  console.error(error);
+  const router = useRouter();
+  useEffect(() => {
+    reportLovableError(error, {
+      boundary: "tanstack_root_error_component",
+    });
+  }, [error]);
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <div className="max-w-md text-center">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">
+          Cette page ne s'est pas chargée
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Une erreur est survenue. Vous pouvez réessayer ou revenir à l'accueil.
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <button
+            onClick={() => {
+              router.invalidate();
+              reset();
+            }}
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Réessayer
+          </button>
+          <Link
+            to="/"
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+          >
+            Accueil
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // -----------------------------------------------------------------------------
 // Root route
 // -----------------------------------------------------------------------------
-
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient;
 }>()({
@@ -563,14 +673,12 @@ export const Route = createRootRouteWithContext<{
 // -----------------------------------------------------------------------------
 // HTML shell
 // -----------------------------------------------------------------------------
-
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="fr">
       <head>
         <HeadContent />
       </head>
-
       <body className="pb-20">
         {children}
         <Scripts />
@@ -582,10 +690,8 @@ function RootShell({ children }: { children: ReactNode }) {
 // -----------------------------------------------------------------------------
 // Persistent application root
 // -----------------------------------------------------------------------------
-
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-
   return (
     <QueryClientProvider client={queryClient}>
       <div className="relative min-h-screen">
