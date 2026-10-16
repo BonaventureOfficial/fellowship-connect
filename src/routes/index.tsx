@@ -1,20 +1,31 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Splash } from "@/components/Splash";
 import { Billboard } from "@/components/Billboard";
 import { MemberCard } from "@/components/MemberCard";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Member } from "@/lib/members";
 import { useRolesMap } from "@/lib/roles";
 import { lfLogo } from "@/lib/assets";
 import { useUnreadAnnouncements } from "@/lib/announcements";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Film,
   Sparkles,
   Share2,
   Check,
   RotateCcw,
+  Heart,
+  MessageCircle,
+  Eye,
+  Send,
+  CornerDownRight,
+  X,
+  ExternalLink,
+  Copy,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -38,7 +49,7 @@ export const Route = createFileRoute("/")({
   component: HomeComponent,
 });
 
-interface VideoPost {
+export interface VideoPost {
   id: string;
   user_id: string;
   author_name: string;
@@ -49,6 +60,22 @@ interface VideoPost {
   description: string | null;
   video_url: string;
   duration_seconds: number | null;
+  likes_count?: number;
+  comments_count?: number;
+  views_count?: number;
+  shares_count?: number;
+  created_at: string;
+}
+
+export interface VideoComment {
+  id: string;
+  video_id: string;
+  user_id: string;
+  author_name: string;
+  author_serial: string | null;
+  author_avatar: string | null;
+  content: string;
+  parent_id: string | null;
   created_at: string;
 }
 
@@ -65,7 +92,9 @@ async function fetchMembers(): Promise<Member[]> {
 async function fetchVideos(): Promise<VideoPost[]> {
   const { data, error } = await supabase
     .from("videos")
-    .select("id,user_id,author_name,author_serial,author_avatar,type,title,description,video_url,duration_seconds,created_at")
+    .select(
+      "id,user_id,author_name,author_serial,author_avatar,type,title,description,video_url,duration_seconds,likes_count,comments_count,views_count,shares_count,created_at"
+    )
     .eq("type", "video")
     .order("created_at", { ascending: false });
   if (error) {
@@ -95,12 +124,718 @@ function formatDate(iso: string) {
   }
 }
 
+// ============================================================================
+// MODAL DE PARTAGE ÉTENDU
+// ============================================================================
+function ShareModal({
+  video,
+  open,
+  onClose,
+}: {
+  video: VideoPost | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  if (!open || !video) return null;
+
+  const currentUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/?vid=${video.id}`
+      : video.video_url;
+
+  const shareTitle = video.title || "Vidéo Living Fellowship";
+  const shareText = `Regardez "${video.title}" par ${video.author_name} sur Living Fellowship :`;
+
+  const handleCopy = () => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(currentUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: shareText,
+          url: currentUrl,
+        });
+      } catch {
+        // Annulé
+      }
+    } else {
+      handleCopy();
+    }
+  };
+
+  const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(
+    `${shareText} ${currentUrl}`
+  )}`;
+  const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+    currentUrl
+  )}`;
+  const twitterUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(
+    currentUrl
+  )}&text=${encodeURIComponent(shareTitle)}`;
+  const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(
+    currentUrl
+  )}&text=${encodeURIComponent(shareTitle)}`;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-3 animate-in fade-in duration-150"
+    >
+      <div className="w-full max-w-sm rounded-3xl border border-border bg-card p-5 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <Share2 className="h-4 w-4" />
+            </span>
+            <h3 className="text-sm font-bold text-foreground">Partager la vidéo</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="rounded-2xl bg-muted/30 p-3 border border-border/50">
+          <p className="text-xs font-bold text-foreground line-clamp-1">{video.title}</p>
+          <p className="text-[0.7rem] text-muted-foreground mt-0.5">Par {video.author_name}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex w-full items-center justify-between rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-xs font-semibold text-primary transition-all hover:bg-primary/20 active:scale-98"
+        >
+          <span className="flex items-center gap-2.5">
+            {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
+            <span>{copied ? "Lien copié dans le presse-papiers !" : "Copier le lien direct"}</span>
+          </span>
+          <span className="text-[0.68rem] uppercase font-bold text-primary/80">
+            {copied ? "✓ Fait" : "Copier"}
+          </span>
+        </button>
+
+        <div className="space-y-1.5 pt-1">
+          <p className="text-[0.68rem] font-bold uppercase tracking-wider text-muted-foreground">
+            Partager sur vos réseaux
+          </p>
+          <div className="grid grid-cols-4 gap-2 pt-1">
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card p-2.5 text-center transition-all hover:border-[#25D366] hover:bg-[#25D366]/10 active:scale-95"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#25D366]/20 text-[#25D366] font-bold text-sm">
+                WA
+              </span>
+              <span className="text-[0.65rem] font-semibold text-foreground">WhatsApp</span>
+            </a>
+
+            <a
+              href={telegramUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card p-2.5 text-center transition-all hover:border-[#229ED9] hover:bg-[#229ED9]/10 active:scale-95"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#229ED9]/20 text-[#229ED9] font-bold text-sm">
+                TG
+              </span>
+              <span className="text-[0.65rem] font-semibold text-foreground">Telegram</span>
+            </a>
+
+            <a
+              href={facebookUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card p-2.5 text-center transition-all hover:border-[#1877F2] hover:bg-[#1877F2]/10 active:scale-95"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1877F2]/20 text-[#1877F2] font-bold text-sm">
+                FB
+              </span>
+              <span className="text-[0.65rem] font-semibold text-foreground">Facebook</span>
+            </a>
+
+            <a
+              href={twitterUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-card p-2.5 text-center transition-all hover:border-primary hover:bg-primary/10 active:scale-95"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-muted text-foreground font-bold text-sm">
+                𝕏
+              </span>
+              <span className="text-[0.65rem] font-semibold text-foreground">X / Twitter</span>
+            </a>
+          </div>
+        </div>
+
+        {typeof navigator !== "undefined" && "share" in navigator && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleNativeShare}
+            className="w-full rounded-2xl text-xs font-semibold gap-2 border-border"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            <span>Plus d'options de partage mobile</span>
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MODAL COMMENTAIRES AVEC RÉPONSES DU CRÉATEUR
+// ============================================================================
+function CommentsModal({
+  video,
+  open,
+  onClose,
+  currentUserMember,
+}: {
+  video: VideoPost | null;
+  open: boolean;
+  onClose: () => void;
+  currentUserMember: Member | null;
+}) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [commentText, setCommentText] = useState("");
+  const [replyingTo, setReplyingTo] = useState<VideoComment | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const { data: comments = [], isLoading } = useQuery({
+    queryKey: ["video-comments", video?.id],
+    enabled: open && !!video,
+    queryFn: async (): Promise<VideoComment[]> => {
+      if (!video) return [];
+      const { data, error } = await supabase
+        .from("video_comments")
+        .select(
+          "id,video_id,user_id,author_name,author_serial,author_avatar,content,parent_id,created_at"
+        )
+        .eq("video_id", video.id)
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.error("Erreur récupération commentaires:", error);
+        return [];
+      }
+      return (data ?? []) as VideoComment[];
+    },
+  });
+
+  if (!open || !video) return null;
+
+  const topLevelComments = comments.filter((c) => !c.parent_id);
+  const repliesMap = new Map<string, VideoComment[]>();
+  comments.forEach((c) => {
+    if (c.parent_id) {
+      const list = repliesMap.get(c.parent_id) || [];
+      list.push(c);
+      repliesMap.set(c.parent_id, list);
+    }
+  });
+
+  const handleStartReply = (comment: VideoComment) => {
+    setReplyingTo(comment);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleSendComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim() || submitting) return;
+
+    if (!user) {
+      setErrorMsg("Veuillez vous connecter pour écrire un commentaire.");
+      return;
+    }
+
+    setSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      const authorName =
+        `${currentUserMember?.first_name ?? ""} ${currentUserMember?.last_name ?? ""}`.trim() ||
+        "Membre";
+
+      const { error } = await supabase.from("video_comments").insert({
+        video_id: video.id,
+        user_id: user.id,
+        author_name: authorName,
+        author_serial: currentUserMember?.serial ?? null,
+        author_avatar: currentUserMember?.avatar_url ?? null,
+        content: commentText.trim(),
+        parent_id: replyingTo ? replyingTo.id : null,
+      });
+
+      if (error) throw error;
+
+      setCommentText("");
+      setReplyingTo(null);
+      queryClient.invalidateQueries({ queryKey: ["video-comments", video.id] });
+      queryClient.invalidateQueries({ queryKey: ["videos"] });
+    } catch (err: any) {
+      setErrorMsg(err.message || "Impossible d'envoyer le commentaire.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isCreatorOfVideo = user?.id === video.user_id;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4 animate-in fade-in duration-150"
+    >
+      <div className="relative flex h-[85vh] w-full max-w-lg flex-col rounded-3xl border border-border bg-card overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between border-b border-border/70 px-4 py-3 bg-muted/20">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <MessageCircle className="h-4 w-4" />
+            </span>
+            <div>
+              <h3 className="text-sm font-bold text-foreground">
+                Commentaires ({comments.length})
+              </h3>
+              <p className="text-[0.65rem] text-muted-foreground line-clamp-1">
+                {video.title}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {isLoading ? (
+            <div className="flex h-40 items-center justify-center text-xs text-muted-foreground animate-pulse">
+              Chargement des commentaires...
+            </div>
+          ) : topLevelComments.length === 0 ? (
+            <div className="flex h-60 flex-col items-center justify-center text-center p-6 space-y-2">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <MessageCircle className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-bold text-foreground">Aucun commentaire pour le moment</p>
+              <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+                Soyez le premier à réagir ou poser une question à l'auteur de cette publication !
+              </p>
+            </div>
+          ) : (
+            topLevelComments.map((comment) => {
+              const replies = repliesMap.get(comment.id) || [];
+              const isCommentByVideoCreator = comment.user_id === video.user_id;
+
+              return (
+                <div key={comment.id} className="space-y-2.5">
+                  <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 space-y-1.5 transition-colors hover:border-primary/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {comment.author_avatar ? (
+                          <img
+                            src={comment.author_avatar}
+                            alt={comment.author_name}
+                            className="h-7 w-7 rounded-full object-cover border border-primary/30"
+                          />
+                        ) : (
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[0.68rem] font-bold text-primary">
+                            {comment.author_name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-foreground">
+                              {comment.author_name}
+                            </span>
+                            {isCommentByVideoCreator && (
+                              <span className="rounded-full bg-gradient-to-r from-primary to-accent px-1.5 py-0.2 text-[0.6rem] font-bold text-white shadow-xs">
+                                Créateur 👑
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1 text-[0.62rem] text-muted-foreground font-mono">
+                            {comment.author_serial && <span>{comment.author_serial} ·</span>}
+                            <span>{formatDate(comment.created_at)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleStartReply(comment)}
+                        className="inline-flex items-center gap-1 text-[0.68rem] font-semibold text-primary hover:underline px-2 py-1 rounded-lg hover:bg-primary/10"
+                      >
+                        <CornerDownRight className="h-3 w-3" />
+                        <span>Répondre</span>
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-foreground/90 whitespace-pre-line leading-relaxed pl-9">
+                      {comment.content}
+                    </p>
+                  </div>
+
+                  {replies.length > 0 && (
+                    <div className="ml-6 space-y-2 border-l-2 border-primary/30 pl-3">
+                      {replies.map((reply) => {
+                        const isReplyByCreator = reply.user_id === video.user_id;
+                        return (
+                          <div
+                            key={reply.id}
+                            className={`rounded-2xl border p-2.5 space-y-1 ${
+                              isReplyByCreator
+                                ? "border-primary/40 bg-primary/10 shadow-xs"
+                                : "border-border/60 bg-muted/10"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                {reply.author_avatar ? (
+                                  <img
+                                    src={reply.author_avatar}
+                                    alt={reply.author_name}
+                                    className="h-6 w-6 rounded-full object-cover border border-primary/30"
+                                  />
+                                ) : (
+                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[0.62rem] font-bold text-primary">
+                                    {reply.author_name.slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[0.72rem] font-bold text-foreground">
+                                      {reply.author_name}
+                                    </span>
+                                    {isReplyByCreator && (
+                                      <span className="rounded-full bg-gradient-to-r from-primary to-accent px-1.5 py-0.2 text-[0.58rem] font-bold text-white">
+                                        Créateur 👑
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[0.6rem] text-muted-foreground font-mono">
+                                    {formatDate(reply.created_at)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-[0.72rem] text-foreground/90 whitespace-pre-line leading-relaxed pl-8">
+                              {reply.content}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {errorMsg && (
+          <div className="bg-destructive/10 px-4 py-2 text-[0.72rem] text-destructive border-t border-destructive/20">
+            {errorMsg}
+          </div>
+        )}
+
+        {replyingTo && (
+          <div className="flex items-center justify-between border-t border-primary/30 bg-primary/10 px-4 py-1.5 text-xs text-primary font-semibold">
+            <span className="flex items-center gap-1.5">
+              <CornerDownRight className="h-3.5 w-3.5" />
+              <span>Réponse à @{replyingTo.author_name}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className="text-muted-foreground hover:text-foreground text-[0.7rem]"
+            >
+              Annuler ✕
+            </button>
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSendComment}
+          className="border-t border-border/70 bg-card p-3 flex items-center gap-2"
+        >
+          <Input
+            ref={inputRef}
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder={
+              replyingTo
+                ? `Répondre à @${replyingTo.author_name}...`
+                : isCreatorOfVideo
+                ? "Répondre en tant que créateur..."
+                : "Écrire un commentaire..."
+            }
+            className="flex-1 rounded-2xl text-xs py-2 bg-muted/20"
+            disabled={submitting}
+            maxLength={500}
+          />
+          <Button
+            type="submit"
+            disabled={!commentText.trim() || submitting}
+            className="h-9 w-9 rounded-2xl bg-gradient-to-r from-primary to-accent p-0 text-white shrink-0 shadow-sm shadow-primary/20 hover:opacity-90 disabled:opacity-40"
+          >
+            {submitting ? (
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// CARTE VIDÉO AVEC COMPTEUR DE VUES STRICT (30s VIDÉO, VÉRIFIÉ SEULEMENT, 24H)
+// ET GESTION DES AIMES (💜 UNIQUE À VIE) ET COMMENTAIRES / PARTAGE
+// ============================================================================
+function VideoCard({
+  video,
+  isVerifiedMember,
+  currentUserId,
+  isLikedByMe,
+  onOpenComments,
+  onOpenShare,
+  onToggleLike,
+}: {
+  video: VideoPost;
+  isVerifiedMember: boolean;
+  currentUserId: string | null;
+  isLikedByMe: boolean;
+  onOpenComments: () => void;
+  onOpenShare: () => void;
+  onToggleLike: () => void;
+}) {
+  const [localViewsCount, setLocalViewsCount] = useState<number>(video.views_count || 0);
+
+  const lastTimeRef = useRef<number | null>(null);
+  const accumulatedWatchTimeRef = useRef<number>(0);
+  const viewRegisteredRef = useRef<boolean>(false);
+
+  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const videoEl = e.currentTarget;
+    const currentTime = videoEl.currentTime;
+
+    if (lastTimeRef.current !== null) {
+      const delta = currentTime - lastTimeRef.current;
+      if (delta > 0 && delta < 1.5) {
+        accumulatedWatchTimeRef.current += delta;
+
+        // RÈGLE STRICTE : Compte vérifié + 30 secondes d'écoute effective
+        if (
+          isVerifiedMember &&
+          !viewRegisteredRef.current &&
+          accumulatedWatchTimeRef.current >= 30
+        ) {
+          viewRegisteredRef.current = true;
+          supabase
+            .rpc("record_video_view", { p_video_id: video.id })
+            .then(({ data: counted, error }) => {
+              if (!error && counted) {
+                setLocalViewsCount((prev) => prev + 1);
+              }
+            })
+            .catch((err) => console.error("Erreur enregistrement vue:", err));
+        }
+      }
+    }
+    lastTimeRef.current = currentTime;
+  };
+
+  const handleSeeked = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    lastTimeRef.current = e.currentTarget.currentTime;
+  };
+
+  const handlePause = () => {
+    lastTimeRef.current = null;
+  };
+
+  const handlePlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    lastTimeRef.current = e.currentTarget.currentTime;
+  };
+
+  return (
+    <article className="overflow-hidden rounded-3xl border border-border bg-card shadow-lg transition-all hover:border-primary/40">
+      <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 bg-muted/20">
+        <div className="flex items-center gap-2.5">
+          {video.author_avatar ? (
+            <img
+              src={video.author_avatar}
+              alt={video.author_name}
+              className="h-9 w-9 rounded-full object-cover border border-primary/30"
+            />
+          ) : (
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary border border-primary/20">
+              {video.author_name.slice(0, 2).toUpperCase() || "LF"}
+            </div>
+          )}
+          <div>
+            <p className="text-xs font-bold text-foreground leading-tight">
+              {video.author_name}
+            </p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {video.author_serial && (
+                <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[0.62rem] font-bold text-primary font-mono">
+                  {video.author_serial}
+                </span>
+              )}
+              <span className="text-[0.65rem] text-muted-foreground">
+                · {formatDate(video.created_at)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span
+            className="flex items-center gap-1 rounded-full border border-border bg-background/80 px-2.5 py-1 text-[0.68rem] font-semibold text-muted-foreground"
+            title="Nombre de vues qualifiées (comptes vérifiés, > 30s de visionnage)"
+          >
+            <Eye className="h-3 w-3 text-primary" />
+            <span>{localViewsCount}</span>
+          </span>
+
+          <button
+            type="button"
+            onClick={onOpenShare}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/80 text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+            title="Partager cette vidéo"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="relative aspect-video w-full bg-black">
+        <video
+          controls
+          playsInline
+          preload="metadata"
+          src={video.video_url}
+          onTimeUpdate={handleTimeUpdate}
+          onSeeked={handleSeeked}
+          onPause={handlePause}
+          onPlay={handlePlay}
+          className="h-full w-full object-contain bg-black"
+        />
+        {video.duration_seconds !== null && video.duration_seconds > 0 && (
+          <span className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/80 px-2 py-0.5 text-[0.68rem] font-bold text-white backdrop-blur-sm">
+            ⏱ {formatDuration(video.duration_seconds)}
+          </span>
+        )}
+      </div>
+
+      <div className="p-4 space-y-2">
+        <h3 className="text-sm font-bold text-foreground leading-snug">
+          {video.title}
+        </h3>
+        {video.description && (
+          <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">
+            {video.description}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between border-t border-border/60 pt-3 mt-3">
+          {/* Aime 💜 (Un seul aime à vie par ID) */}
+          <button
+            type="button"
+            onClick={onToggleLike}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95 ${
+              isLikedByMe
+                ? "bg-purple-600/20 text-purple-400 border border-purple-500/40 shadow-sm shadow-purple-500/20"
+                : "border border-border bg-card text-muted-foreground hover:border-purple-500/40 hover:text-purple-400"
+            }`}
+            title={
+              isLikedByMe
+                ? "Vous avez aimé cette vidéo (1 aime à vie 💜)"
+                : "Aimer cette vidéo 💜"
+            }
+          >
+            <Heart
+              className={`h-4 w-4 transition-transform ${
+                isLikedByMe ? "fill-purple-500 text-purple-500 scale-110" : ""
+              }`}
+            />
+            <span>{isLikedByMe ? "Aimé" : "J'aime"}</span>
+            <span className="rounded-full bg-purple-500/20 px-1.5 py-0.2 text-[0.65rem] font-bold text-purple-300">
+              {video.likes_count || 0}
+            </span>
+          </button>
+
+          {/* Commentaires 💬 */}
+          <button
+            type="button"
+            onClick={onOpenComments}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground active:scale-95"
+            title="Ouvrir les commentaires"
+          >
+            <MessageCircle className="h-4 w-4 text-primary" />
+            <span>Commentaires</span>
+            <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[0.65rem] font-bold text-primary">
+              {video.comments_count || 0}
+            </span>
+          </button>
+
+          {/* Partager ↗️ */}
+          <button
+            type="button"
+            onClick={onOpenShare}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground active:scale-95"
+            title="Partager"
+          >
+            <Share2 className="h-4 w-4" />
+            <span>Partager</span>
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// ============================================================================
+// COMPOSANT PRINCIPAL ROUTE ACCUEIL
+// ============================================================================
 function HomeComponent() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
   const [showSplash, setShowSplash] = useState(false);
   const [viewMode, setViewMode] = useState<"media" | "community">("media");
   const [searchQuery, setSearchQuery] = useState("");
   const [isLightMode, setIsLightMode] = useState(false);
-  const [copiedVideoId, setCopiedVideoId] = useState<string | null>(null);
+
+  const [activeCommentsVideo, setActiveCommentsVideo] = useState<VideoPost | null>(null);
+  const [activeShareVideo, setActiveShareVideo] = useState<VideoPost | null>(null);
+  const [likeActionMsg, setLikeActionMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -141,13 +876,40 @@ function HomeComponent() {
   const { rolesMap } = useRolesMap();
   const unreadAnnouncements = useUnreadAnnouncements();
 
-  // Membres
+  const { data: myMember = null } = useQuery({
+    queryKey: ["my-member-status", user?.id],
+    enabled: !!user,
+    queryFn: async (): Promise<Member | null> => {
+      const { data, error } = await supabase
+        .from("members")
+        .select("id,user_id,first_name,last_name,avatar_url,serial,status")
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (error) return null;
+      return (data as Member | null) ?? null;
+    },
+  });
+
+  const isVerifiedMember = myMember?.status === "Vérifié";
+
+  const { data: myLikedIds = new Set<string>() } = useQuery({
+    queryKey: ["my-video-likes", user?.id],
+    enabled: !!user,
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await supabase
+        .from("video_likes")
+        .select("video_id")
+        .eq("user_id", user!.id);
+      if (error) return new Set();
+      return new Set((data ?? []).map((l: any) => l.video_id));
+    },
+  });
+
   const { data: members = [], isLoading: isLoadingMembers } = useQuery({
     queryKey: ["members"],
     queryFn: fetchMembers,
   });
 
-  // Vidéos d'Accueil
   const {
     data: videos = [],
     isLoading: isLoadingVideos,
@@ -175,11 +937,41 @@ function HomeComponent() {
     setShowSplash(false);
   };
 
-  const handleShareVideo = (video: VideoPost) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(video.video_url);
-      setCopiedVideoId(video.id);
-      setTimeout(() => setCopiedVideoId(null), 2000);
+  // Action Like 💜 (1 like à vie par utilisateur garanti)
+  const handleLikeVideo = async (video: VideoPost) => {
+    if (!user) {
+      setLikeActionMsg("Connectez-vous pour aimer ce contenu 💜");
+      setTimeout(() => setLikeActionMsg(null), 3000);
+      return;
+    }
+
+    if (myLikedIds.has(video.id)) {
+      setLikeActionMsg("Vous avez déjà attribué votre j'aime à vie 💜");
+      setTimeout(() => setLikeActionMsg(null), 3000);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.from("video_likes").insert({
+        video_id: video.id,
+        user_id: user.id,
+      });
+
+      if (error) {
+        if (error.code === "23505") {
+          setLikeActionMsg("Vous avez déjà attribué votre j'aime 💜");
+        } else {
+          setLikeActionMsg("Erreur lors de l'enregistrement du j'aime.");
+        }
+      } else {
+        setLikeActionMsg("J'aime enregistré 💜 !");
+        queryClient.invalidateQueries({ queryKey: ["my-video-likes", user.id] });
+        queryClient.invalidateQueries({ queryKey: ["videos"] });
+      }
+      setTimeout(() => setLikeActionMsg(null), 2500);
+    } catch {
+      setLikeActionMsg("Erreur réseau lors du j'aime.");
+      setTimeout(() => setLikeActionMsg(null), 2500);
     }
   };
 
@@ -187,12 +979,15 @@ function HomeComponent() {
 
   return (
     <div className="relative min-h-screen">
-      {/* ========================================================
-          1. HEADER FIXE AU SCROLL
-          ======================================================== */}
+      {likeActionMsg && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 rounded-2xl bg-purple-950/90 border border-purple-500/40 px-4 py-2 text-xs font-bold text-purple-200 shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-top-2">
+          {likeActionMsg}
+        </div>
+      )}
+
+      {/* HEADER FIXE */}
       <header className="fixed top-0 inset-x-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl transition-colors shadow-sm">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-2.5">
-          {/* Logo LF seul */}
           <button
             type="button"
             onClick={() => {
@@ -209,7 +1004,6 @@ function HomeComponent() {
             />
           </button>
 
-          {/* Onglet de recherche (affiche la communauté) */}
           <button
             type="button"
             onClick={() => {
@@ -232,7 +1026,6 @@ function HomeComponent() {
             </span>
           </button>
 
-          {/* Cloche notification + Thème Jour/Nuit */}
           <div className="flex items-center gap-2">
             <Link
               to="/annonces"
@@ -271,12 +1064,9 @@ function HomeComponent() {
         </div>
       </header>
 
-      {/* ========================================================
-          2. CONTENU PRINCIPAL
-          ======================================================== */}
+      {/* CONTENU PRINCIPAL */}
       <main className="mx-auto max-w-2xl px-4 pt-20 pb-24">
         {viewMode === "community" ? (
-          /* VUE COMMUNAUTÉ */
           <section>
             <div className="mb-4 rounded-2xl border border-border bg-card p-3 shadow-sm">
               <div className="relative flex items-center">
@@ -368,11 +1158,7 @@ function HomeComponent() {
             </div>
           </section>
         ) : (
-          /* ========================================================
-              VUE ACCUEIL : FLUX MÉDIA VIDÉO
-             ======================================================== */
           <section className="space-y-6">
-            {/* Titre & bouton Actualiser */}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-1.5">
                 <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
@@ -391,7 +1177,6 @@ function HomeComponent() {
               </button>
             </div>
 
-            {/* Chargement */}
             {isLoadingVideos ? (
               <div className="space-y-4">
                 {[0, 1].map((i) => (
@@ -402,7 +1187,6 @@ function HomeComponent() {
                 ))}
               </div>
             ) : videos.length === 0 ? (
-              /* État vide si aucune vidéo */
               <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card/60 p-8 text-center backdrop-blur-sm">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/20">
                   <Film className="h-7 w-7" />
@@ -419,93 +1203,37 @@ function HomeComponent() {
                 </div>
               </div>
             ) : (
-              /* Liste des vidéos */
               <div className="space-y-6">
                 {videos.map((vid) => (
-                  <article
+                  <VideoCard
                     key={vid.id}
-                    className="overflow-hidden rounded-3xl border border-border bg-card shadow-lg transition-all hover:border-primary/40"
-                  >
-                    {/* Auteur */}
-                    <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 bg-muted/20">
-                      <div className="flex items-center gap-2.5">
-                        {vid.author_avatar ? (
-                          <img
-                            src={vid.author_avatar}
-                            alt={vid.author_name}
-                            className="h-9 w-9 rounded-full object-cover border border-primary/30"
-                          />
-                        ) : (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary border border-primary/20">
-                            {vid.author_name.slice(0, 2).toUpperCase() || "LF"}
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-xs font-bold text-foreground leading-tight">
-                            {vid.author_name}
-                          </p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            {vid.author_serial && (
-                              <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[0.62rem] font-bold text-primary font-mono">
-                                {vid.author_serial}
-                              </span>
-                            )}
-                            <span className="text-[0.65rem] text-muted-foreground">
-                              · {formatDate(vid.created_at)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Partager / Copier */}
-                      <button
-                        type="button"
-                        onClick={() => handleShareVideo(vid)}
-                        className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/80 text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-                        title="Copier le lien direct de la vidéo"
-                      >
-                        {copiedVideoId === vid.id ? (
-                          <Check className="h-3.5 w-3.5 text-primary" />
-                        ) : (
-                          <Share2 className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Lecteur Vidéo */}
-                    <div className="relative aspect-video w-full bg-black">
-                      <video
-                        controls
-                        playsInline
-                        preload="metadata"
-                        src={vid.video_url}
-                        className="h-full w-full object-contain bg-black"
-                      />
-                      {vid.duration_seconds !== null && vid.duration_seconds > 0 && (
-                        <span className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/80 px-2 py-0.5 text-[0.68rem] font-bold text-white backdrop-blur-sm">
-                          ⏱ {formatDuration(vid.duration_seconds)}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Titre et description */}
-                    <div className="p-4 space-y-1.5">
-                      <h3 className="text-sm font-bold text-foreground leading-snug">
-                        {vid.title}
-                      </h3>
-                      {vid.description && (
-                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">
-                          {vid.description}
-                        </p>
-                      )}
-                    </div>
-                  </article>
+                    video={vid}
+                    isVerifiedMember={isVerifiedMember}
+                    currentUserId={user?.id ?? null}
+                    isLikedByMe={myLikedIds.has(vid.id)}
+                    onOpenComments={() => setActiveCommentsVideo(vid)}
+                    onOpenShare={() => setActiveShareVideo(vid)}
+                    onToggleLike={() => handleLikeVideo(vid)}
+                  />
                 ))}
               </div>
             )}
           </section>
         )}
       </main>
+
+      <CommentsModal
+        video={activeCommentsVideo}
+        open={!!activeCommentsVideo}
+        onClose={() => setActiveCommentsVideo(null)}
+        currentUserMember={myMember}
+      />
+
+      <ShareModal
+        video={activeShareVideo}
+        open={!!activeShareVideo}
+        onClose={() => setActiveShareVideo(null)}
+      />
     </div>
   );
 }
