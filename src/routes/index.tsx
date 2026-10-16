@@ -624,6 +624,7 @@ function CommentsModal({
 // CARTE VIDÉO AVEC COMPTEUR DE VUES STRICT (30s VIDÉO, VÉRIFIÉ SEULEMENT, 24H)
 // ET GESTION DES AIMES (💜 UNIQUE À VIE) ET COMMENTAIRES / PARTAGE
 // ============================================================================
+
 function VideoCard({
   video,
   isVerifiedMember,
@@ -641,43 +642,78 @@ function VideoCard({
   onOpenShare: () => void;
   onToggleLike: () => void;
 }) {
-  const [localViewsCount, setLocalViewsCount] = useState<number>(video.views_count || 0);
+  const [localViewsCount, setLocalViewsCount] = useState<number>(
+    video.views_count || 0
+  );
 
   const lastTimeRef = useRef<number | null>(null);
   const accumulatedWatchTimeRef = useRef<number>(0);
   const viewRegisteredRef = useRef<boolean>(false);
 
-  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Keep the view count synchronized if the video data is refreshed.
+  useEffect(() => {
+    setLocalViewsCount(video.views_count || 0);
+  }, [video.id, video.views_count]);
+
+  // Reset watch-time tracking when a different video is displayed.
+  useEffect(() => {
+    lastTimeRef.current = null;
+    accumulatedWatchTimeRef.current = 0;
+    viewRegisteredRef.current = false;
+  }, [video.id]);
+
+  const handleTimeUpdate = (
+    e: React.SyntheticEvent<HTMLVideoElement>
+  ) => {
     const videoEl = e.currentTarget;
     const currentTime = videoEl.currentTime;
 
     if (lastTimeRef.current !== null) {
       const delta = currentTime - lastTimeRef.current;
-      if (delta > 0 && delta < 1.5) {
+
+      // Count forward playback only, excluding large jumps and seeking.
+      if (delta > 0 && delta < 1.5 && !videoEl.paused) {
         accumulatedWatchTimeRef.current += delta;
 
-        // RÈGLE STRICTE : Compte vérifié + 30 secondes d'écoute effective
+        // Only verified members can register a qualified view.
         if (
           isVerifiedMember &&
           !viewRegisteredRef.current &&
           accumulatedWatchTimeRef.current >= 30
         ) {
+          // Mark before the request to prevent duplicate submissions.
           viewRegisteredRef.current = true;
+
           supabase
-            .rpc("record_video_view", { p_video_id: video.id })
+            .rpc("record_video_view", {
+              p_video_id: video.id,
+            })
             .then(({ data: counted, error }) => {
-              if (!error && counted) {
-                setLocalViewsCount((prev) => prev + 1);
+              if (error) {
+                console.error("Error recording video view:", error);
+                return;
+              }
+
+              if (counted) {
+                setLocalViewsCount((previous) => previous + 1);
               }
             })
-            .catch((err) => console.error("Erreur enregistrement vue:", err));
+            .catch((error) => {
+              console.error("Error recording video view:", error);
+            });
         }
       }
     }
+
     lastTimeRef.current = currentTime;
   };
 
-  const handleSeeked = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+  const handleSeeked = (
+    e: React.SyntheticEvent<HTMLVideoElement>
+  ) => {
+    // Seeking must not count as watched time.
     lastTimeRef.current = e.currentTarget.currentTime;
   };
 
@@ -685,38 +721,58 @@ function VideoCard({
     lastTimeRef.current = null;
   };
 
-  const handlePlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-    lastTimeRef.current = e.currentTarget.currentTime;
+  const handlePlay = (
+    e: React.SyntheticEvent<HTMLVideoElement>
+  ) => {
+    const currentVideo = e.currentTarget;
+
+    lastTimeRef.current = currentVideo.currentTime;
+
+    // Pause other videos, but never pause this video itself.
+    document
+      .querySelectorAll<HTMLVideoElement>("video")
+      .forEach((otherVideo) => {
+        if (
+          otherVideo !== currentVideo &&
+          !otherVideo.paused
+        ) {
+          otherVideo.pause();
+        }
+      });
   };
 
-  return (<article
-  id={`lf-video-${video.id}`}
-  className="overflow-hidden rounded-3xl border border-border bg-card shadow-lg transition-all hover:border-primary/40"
->
-    
-      <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 bg-muted/20">
+  return (
+    <article
+      id={`lf-video-${video.id}`}
+      data-lf-home-video-card={video.id}
+      className="overflow-hidden rounded-3xl border border-border bg-card shadow-lg transition-all hover:border-primary/40"
+    >
+      <div className="flex items-center justify-between border-b border-border/50 bg-muted/20 px-4 py-3">
         <div className="flex items-center gap-2.5">
           {video.author_avatar ? (
             <img
               src={video.author_avatar}
               alt={video.author_name}
-              className="h-9 w-9 rounded-full object-cover border border-primary/30"
+              className="h-9 w-9 rounded-full border border-primary/30 object-cover"
             />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary border border-primary/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/20 bg-primary/15 text-xs font-bold text-primary">
               {video.author_name.slice(0, 2).toUpperCase() || "LF"}
             </div>
           )}
+
           <div>
-            <p className="text-xs font-bold text-foreground leading-tight">
+            <p className="text-xs font-bold leading-tight text-foreground">
               {video.author_name}
             </p>
-            <div className="flex items-center gap-1.5 mt-0.5">
+
+            <div className="mt-0.5 flex items-center gap-1.5">
               {video.author_serial && (
-                <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[0.62rem] font-bold text-primary font-mono">
+                <span className="rounded-full bg-primary/15 px-1.5 py-0.5 font-mono text-[0.62rem] font-bold text-primary">
                   {video.author_serial}
                 </span>
               )}
+
               <span className="text-[0.65rem] text-muted-foreground">
                 · {formatDate(video.created_at)}
               </span>
@@ -727,7 +783,7 @@ function VideoCard({
         <div className="flex items-center gap-2">
           <span
             className="flex items-center gap-1 rounded-full border border-border bg-background/80 px-2.5 py-1 text-[0.68rem] font-semibold text-muted-foreground"
-            title="Nombre de vues qualifiées (comptes vérifiés, > 30s de visionnage)"
+            title="Nombre de vues qualifiées : membres vérifiés et 30 secondes de visionnage"
           >
             <Eye className="h-3 w-3 text-primary" />
             <span>{localViewsCount}</span>
@@ -738,6 +794,7 @@ function VideoCard({
             onClick={onOpenShare}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/80 text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
             title="Partager cette vidéo"
+            aria-label="Partager cette vidéo"
           >
             <Share2 className="h-3.5 w-3.5" />
           </button>
@@ -745,73 +802,72 @@ function VideoCard({
       </div>
 
       <div className="relative aspect-video w-full bg-black">
-        
-<video
-  controls
-  playsInline
-  loop
-  preload="metadata"
-  src={video.video_url}
-  onTimeUpdate={handleTimeUpdate}
-  onSeeked={handleSeeked}
-  onPause={handlePause}
-  onPlay={(e) => {
-    handlePlay(e);
+        <video
+          ref={videoRef}
+          data-lf-home-video="true"
+          data-lf-video-id={video.id}
+          controls
+          playsInline
+          loop
+          preload="metadata"
+          src={video.video_url}
+          onTimeUpdate={handleTimeUpdate}
+          onSeeking={handlePause}
+          onSeeked={handleSeeked}
+          onPause={handlePause}
+          onPlay={handlePlay}
+          className="h-full w-full bg-black object-contain"
+          aria-label={video.title}
+        />
 
-    // Pause every other video when this one starts.
-    document.querySelectorAll("video").forEach((otherVideo) => {
-      if (otherVideo !== e.currentTarget && !otherVideo.paused) {
-        otherVideo.pause();
-      }
-    });
-  }}
-  className="h-full w-full object-contain bg-black"
-/>
-        {video.duration_seconds !== null && video.duration_seconds > 0 && (
-          <span className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/80 px-2 py-0.5 text-[0.68rem] font-bold text-white backdrop-blur-sm">
-            ⏱ {formatDuration(video.duration_seconds)}
-          </span>
-        )}
+        {video.duration_seconds !== null &&
+          video.duration_seconds > 0 && (
+            <span className="pointer-events-none absolute bottom-3 right-3 rounded-md bg-black/80 px-2 py-0.5 text-[0.68rem] font-bold text-white backdrop-blur-sm">
+              ⏱ {formatDuration(video.duration_seconds)}
+            </span>
+          )}
       </div>
 
-      <div className="p-4 space-y-2">
-        <h3 className="text-sm font-bold text-foreground leading-snug">
+      <div className="space-y-2 p-4">
+        <h3 className="text-sm font-bold leading-snug text-foreground">
           {video.title}
         </h3>
+
         {video.description && (
-          <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line">
+          <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
             {video.description}
           </p>
         )}
 
-        <div className="flex items-center justify-between border-t border-border/60 pt-3 mt-3">
-          {/* Aime 💜 (Un seul aime à vie par ID) */}
+        <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-3">
           <button
             type="button"
             onClick={onToggleLike}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all active:scale-95 ${
               isLikedByMe
-                ? "bg-purple-600/20 text-purple-400 border border-purple-500/40 shadow-sm shadow-purple-500/20"
+                ? "border border-purple-500/40 bg-purple-600/20 text-purple-400 shadow-sm shadow-purple-500/20"
                 : "border border-border bg-card text-muted-foreground hover:border-purple-500/40 hover:text-purple-400"
             }`}
             title={
               isLikedByMe
-                ? "Vous avez aimé cette vidéo (1 aime à vie 💜)"
-                : "Aimer cette vidéo 💜"
+                ? "Vous avez aimé cette vidéo"
+                : "Aimer cette vidéo"
             }
+            aria-pressed={isLikedByMe}
           >
             <Heart
               className={`h-4 w-4 transition-transform ${
-                isLikedByMe ? "fill-purple-500 text-purple-500 scale-110" : ""
+                isLikedByMe
+                  ? "scale-110 fill-purple-500 text-purple-500"
+                  : ""
               }`}
             />
             <span>{isLikedByMe ? "Aimé" : "J'aime"}</span>
-            <span className="rounded-full bg-purple-500/20 px-1.5 py-0.2 text-[0.65rem] font-bold text-purple-300">
+            <span className="rounded-full bg-purple-500/20 px-1.5 py-0.5 text-[0.65rem] font-bold text-purple-300">
               {video.likes_count || 0}
             </span>
           </button>
 
-          {/* Commentaires 💬 */}
           <button
             type="button"
             onClick={onOpenComments}
@@ -820,12 +876,11 @@ function VideoCard({
           >
             <MessageCircle className="h-4 w-4 text-primary" />
             <span>Commentaires</span>
-            <span className="rounded-full bg-primary/15 px-1.5 py-0.2 text-[0.65rem] font-bold text-primary">
+            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[0.65rem] font-bold text-primary">
               {video.comments_count || 0}
             </span>
           </button>
 
-          {/* Partager ↗️ */}
           <button
             type="button"
             onClick={onOpenShare}
