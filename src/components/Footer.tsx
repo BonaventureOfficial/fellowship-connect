@@ -595,7 +595,7 @@ function ReelCardItem({
   const accumulatedWatchTimeRef = useRef<number>(0);
   const viewRegisteredRef = useRef<boolean>(false);
 
-  // Pause a Reel when it is no longer sufficiently visible.
+  // Automatically play the visible Reel and pause all others.
   useEffect(() => {
     const video = videoRef.current;
 
@@ -603,12 +603,31 @@ function ReelCardItem({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (!entry.isIntersecting || entry.intersectionRatio < 0.25) {
+        if (entry.intersectionRatio >= 0.6) {
+          // Pause every other Reel before starting this one.
+          document
+            .querySelectorAll<HTMLVideoElement>(
+              'video[data-reel-video="true"]'
+            )
+            .forEach((otherVideo) => {
+              if (otherVideo !== video) {
+                otherVideo.pause();
+              }
+            });
+
+          // Muted playback allows autoplay on most mobile browsers.
+          void video.play().catch((error) => {
+            console.debug(
+              "Lecture automatique indisponible :",
+              error
+            );
+          });
+        } else {
           video.pause();
         }
       },
       {
-        threshold: [0, 0.25],
+        threshold: [0, 0.25, 0.6],
       }
     );
 
@@ -693,6 +712,8 @@ function ReelCardItem({
         data-reel-video="true"
         controls
         playsInline
+        muted
+        loop
         preload="metadata"
         src={reel.video_url}
         onTimeUpdate={handleTimeUpdate}
