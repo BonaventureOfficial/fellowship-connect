@@ -569,6 +569,8 @@ function CommentsModal({
 // ============================================================================
 // CARTE RÉEL INDIVIDUELLE AVEC VUES QUALIFIÉES (10 SECONDES), LIKES ET COMMENTAIRES
 // ============================================================================
+
+
 function ReelCardItem({
   reel,
   isVerifiedMember,
@@ -584,28 +586,60 @@ function ReelCardItem({
   onOpenShare: () => void;
   onToggleLike: () => void;
 }) {
-  const [localViewsCount, setLocalViewsCount] = useState<number>(reel.views_count || 0);
+  const [localViewsCount, setLocalViewsCount] = useState<number>(
+    reel.views_count || 0
+  );
 
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastTimeRef = useRef<number | null>(null);
   const accumulatedWatchTimeRef = useRef<number>(0);
   const viewRegisteredRef = useRef<boolean>(false);
 
-  const handleTimeUpdate = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+  // Pause a Reel when it is no longer sufficiently visible.
+  useEffect(() => {
+    const video = videoRef.current;
+
+    if (!video || typeof IntersectionObserver === "undefined") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.25) {
+          video.pause();
+        }
+      },
+      {
+        threshold: [0, 0.25],
+      }
+    );
+
+    observer.observe(video);
+
+    return () => {
+      observer.disconnect();
+      video.pause();
+    };
+  }, []);
+
+  const handleTimeUpdate = (
+    e: React.SyntheticEvent<HTMLVideoElement>
+  ) => {
     const videoEl = e.currentTarget;
     const currentTime = videoEl.currentTime;
 
     if (lastTimeRef.current !== null) {
       const delta = currentTime - lastTimeRef.current;
+
       if (delta > 0 && delta < 1.5) {
         accumulatedWatchTimeRef.current += delta;
 
-        // RÈGLE : 10 secondes effectives pour les Réels + compte vérifié
+        // Register a qualified view after 10 seconds of effective playback.
         if (
           isVerifiedMember &&
           !viewRegisteredRef.current &&
           accumulatedWatchTimeRef.current >= 10
         ) {
           viewRegisteredRef.current = true;
+
           supabase
             .rpc("record_video_view", { p_video_id: reel.id })
             .then(({ data: counted, error }) => {
@@ -613,14 +647,19 @@ function ReelCardItem({
                 setLocalViewsCount((prev) => prev + 1);
               }
             })
-            .catch((err) => console.error("Erreur enregistrement vue Réel:", err));
+            .catch((err) =>
+              console.error("Erreur enregistrement vue Réel:", err)
+            );
         }
       }
     }
+
     lastTimeRef.current = currentTime;
   };
 
-  const handleSeeked = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+  const handleSeeked = (
+    e: React.SyntheticEvent<HTMLVideoElement>
+  ) => {
     lastTimeRef.current = e.currentTarget.currentTime;
   };
 
@@ -628,13 +667,30 @@ function ReelCardItem({
     lastTimeRef.current = null;
   };
 
-  const handlePlay = (e: React.SyntheticEvent<HTMLVideoElement>) => {
-    lastTimeRef.current = e.currentTarget.currentTime;
+  const handlePlay = (
+    e: React.SyntheticEvent<HTMLVideoElement>
+  ) => {
+    const currentVideo = e.currentTarget;
+
+    // Enforce a single playing Reel across the entire Reels list.
+    document
+      .querySelectorAll<HTMLVideoElement>(
+        'video[data-reel-video="true"]'
+      )
+      .forEach((otherVideo) => {
+        if (otherVideo !== currentVideo && !otherVideo.paused) {
+          otherVideo.pause();
+        }
+      });
+
+    lastTimeRef.current = currentVideo.currentTime;
   };
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-border bg-black aspect-[9/15] shadow-xl">
       <video
+        ref={videoRef}
+        data-reel-video="true"
         controls
         playsInline
         preload="metadata"
@@ -647,7 +703,7 @@ function ReelCardItem({
       />
 
       <div className="absolute right-2.5 bottom-16 z-20 flex flex-col items-center gap-3">
-        {/* Aime 💜 (1 aime à vie par ID) */}
+        {/* Like */}
         <button
           type="button"
           onClick={onToggleLike}
@@ -656,7 +712,11 @@ function ReelCardItem({
               ? "bg-purple-600/80 text-white shadow-lg shadow-purple-600/40"
               : "bg-black/60 text-white/90 hover:bg-black/80"
           }`}
-          title={isLikedByMe ? "Vous avez aimé ce Réel 💜" : "Aimer ce Réel 💜"}
+          title={
+            isLikedByMe
+              ? "Vous avez aimé ce Réel 💜"
+              : "Aimer ce Réel 💜"
+          }
         >
           <Heart
             className={`h-5 w-5 ${
@@ -668,7 +728,7 @@ function ReelCardItem({
           </span>
         </button>
 
-        {/* Commentaires 💬 */}
+        {/* Comments */}
         <button
           type="button"
           onClick={onOpenComments}
@@ -681,7 +741,7 @@ function ReelCardItem({
           </span>
         </button>
 
-        {/* Partager ↗️ */}
+        {/* Share */}
         <button
           type="button"
           onClick={onOpenShare}
@@ -689,10 +749,12 @@ function ReelCardItem({
           title="Partager le Réel"
         >
           <Share2 className="h-5 w-5 text-white" />
-          <span className="text-[0.6rem] font-bold leading-none mt-0.5">Partage</span>
+          <span className="text-[0.6rem] font-bold leading-none mt-0.5">
+            Partage
+          </span>
         </button>
 
-        {/* Vues qualifiées 👁️ */}
+        {/* Qualified views */}
         <div
           className="flex h-10 w-10 flex-col items-center justify-center rounded-full bg-black/50 text-white/80 backdrop-blur-md text-center"
           title="Vues qualifiées (comptes vérifiés, >10s)"
@@ -704,16 +766,22 @@ function ReelCardItem({
         </div>
       </div>
 
+      {/* Reel information */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent p-4 pr-16 text-white">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold">{reel.author_name}</span>
+
           {reel.author_serial && (
             <span className="rounded-full bg-primary/90 px-1.5 py-0.2 text-[0.62rem] font-bold text-white font-mono">
               {reel.author_serial}
             </span>
           )}
         </div>
-        <p className="text-xs font-semibold mt-1 line-clamp-1">{reel.title}</p>
+
+        <p className="text-xs font-semibold mt-1 line-clamp-1">
+          {reel.title}
+        </p>
+
         {reel.description && (
           <p className="text-[0.68rem] text-white/80 line-clamp-2 mt-0.5 leading-snug">
             {reel.description}
