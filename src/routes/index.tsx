@@ -664,6 +664,52 @@ function VideoCard({
     viewRegisteredRef.current = false;
   }, [video.id]);
 
+  // Handoff vers le lecteur flottant quand la carte sort de l'écran
+  useEffect(() => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Si la vidéo est en train de jouer ET qu'elle sort du viewport
+        if (!entry.isIntersecting && !videoEl.paused) {
+          window.dispatchEvent(
+            new CustomEvent("lf:persistent-video-start", {
+              detail: {
+                id: video.id,
+                title: video.title,
+                authorName: video.author_name,
+                videoUrl: video.video_url,
+                currentTime: videoEl.currentTime,
+                muted: videoEl.muted,
+                isVerifiedMember,
+                accumulatedWatchTime: accumulatedWatchTimeRef.current,
+                viewRegistered: viewRegisteredRef.current,
+              },
+            })
+          );
+
+          // On met en pause la vidéo de la carte (le flottant prend le relais)
+          videoEl.pause();
+        }
+      },
+      {
+        threshold: 0.25,
+        rootMargin: "0px 0px -80px 0px",
+      }
+    );
+
+    observer.observe(videoEl);
+
+    return () => observer.disconnect();
+  }, [
+    video.id,
+    video.title,
+    video.author_name,
+    video.video_url,
+    isVerifiedMember,
+  ]);
+
   const handleTimeUpdate = (
     e: React.SyntheticEvent<HTMLVideoElement>
   ) => {
