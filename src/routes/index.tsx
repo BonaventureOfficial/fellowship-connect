@@ -131,17 +131,23 @@ function ShareModal({
   video,
   open,
   onClose,
+  sharerSerial,
 }: {
   video: VideoPost | null;
   open: boolean;
   onClose: () => void;
+  sharerSerial?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   if (!open || !video) return null;
 
-  const currentUrl =
+    const currentUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/?vid=${video.id}`
+      ? `${window.location.origin}/?vid=${encodeURIComponent(video.id)}${
+          sharerSerial
+            ? `&sharedBy=${encodeURIComponent(sharerSerial)}`
+            : ""
+        }`
       : video.video_url;
 
   const shareTitle = video.title || "Vidéo Living Fellowship";
@@ -1239,12 +1245,13 @@ function HomeComponent() {
         onClose={() => setActiveCommentsVideo(null)}
         currentUserMember={myMember}
       />
-
       <ShareModal
         video={activeShareVideo}
         open={!!activeShareVideo}
         onClose={() => setActiveShareVideo(null)}
+        sharerSerial={myMember?.serial ?? null}
       />
+      
     </div>
   );
 }
