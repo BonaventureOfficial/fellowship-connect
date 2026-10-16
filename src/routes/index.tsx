@@ -1000,15 +1000,22 @@ function HomeComponent() {
     },
   });
 
-  // Display only the shared item when a direct content link is opened.
+  
+  // Show the shared item first, followed by the remaining feed.
   const displayedVideos = useMemo(() => {
     if (!sharedVideoId) return videos;
 
     const target =
-      videos.find((video) => video.id === sharedVideoId) ??
-      (sharedVideo?.id === sharedVideoId ? sharedVideo : null);
+      sharedVideo?.id === sharedVideoId
+        ? sharedVideo
+        : videos.find((video) => video.id === sharedVideoId);
 
-    return target ? [target] : [];
+    if (!target) return [];
+
+    return [
+      target,
+      ...videos.filter((video) => video.id !== sharedVideoId),
+    ];
   }, [videos, sharedVideo, sharedVideoId]);
 
   // Scroll to the shared item and attempt muted playback.
@@ -1342,8 +1349,10 @@ function HomeComponent() {
               )}
             </div>
 
-            {isLoadingVideos ||
-            (sharedVideoId !== null && isLoadingSharedVideo) ? (
+{(sharedVideoId
+  ? isLoadingSharedVideo &&
+    !videos.some((video) => video.id === sharedVideoId)
+  : isLoadingVideos) ? (
               <div className="space-y-4">
                 {[0, 1].map((i) => (
                   <div
