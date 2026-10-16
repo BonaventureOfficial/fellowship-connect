@@ -82,17 +82,23 @@ function ShareModal({
   video,
   open,
   onClose,
+  sharerSerial,
 }: {
   video: VideoPost | null;
   open: boolean;
   onClose: () => void;
+  sharerSerial?: string | null;
 }) {
   const [copied, setCopied] = useState(false);
   if (!open || !video) return null;
 
-  const currentUrl =
+    const currentUrl =
     typeof window !== "undefined"
-      ? `${window.location.origin}/?vid=${video.id}`
+      ? `${window.location.origin}/?vid=${encodeURIComponent(video.id)}${
+          sharerSerial
+            ? `&sharedBy=${encodeURIComponent(sharerSerial)}`
+            : ""
+        }`
       : video.video_url;
 
   const shareTitle = video.title || "Réel Living Fellowship";
@@ -1413,11 +1419,12 @@ function ReelsModal({
         currentUserMember={myMember}
       />
 
-      <ShareModal
-        video={activeShareReel}
-        open={!!activeShareReel}
-        onClose={() => setActiveShareReel(null)}
-      />
+              <ShareModal
+          video={activeShareReel}
+          open={!!activeShareReel}
+          onClose={() => setActiveShareReel(null)}
+          sharerSerial={myMember?.serial ?? null}
+        />
     </>
   );
 }
