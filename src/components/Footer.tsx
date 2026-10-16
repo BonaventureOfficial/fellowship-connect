@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1239,6 +1239,7 @@ function PublishModal({ open, defaultType = "video", onClose }: PublishModalProp
 // ============================================================================
 // MODAL RÉELS AVEC FLUX VERTICAL ET INTERACTIONS (AIMES, COMMENTAIRES, VUES)
 // ============================================================================
+
 function ReelsModal({
   open,
   onClose,
@@ -1251,9 +1252,17 @@ function ReelsModal({
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const [activeCommentsReel, setActiveCommentsReel] = useState<VideoPost | null>(null);
-  const [activeShareReel, setActiveShareReel] = useState<VideoPost | null>(null);
+  const [activeCommentsReel, setActiveCommentsReel] =
+    useState<VideoPost | null>(null);
+  const [activeShareReel, setActiveShareReel] =
+    useState<VideoPost | null>(null);
   const [likeActionMsg, setLikeActionMsg] = useState<string | null>(null);
+
+  // Detect whether this page was opened from a shared Reel link.
+  const sharedReelId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("vid")
+      : null;
 
   const { data: myMember = null } = useQuery({
     queryKey: ["my-member-status", user?.id],
@@ -1264,7 +1273,9 @@ function ReelsModal({
         .select("id,user_id,first_name,last_name,avatar_url,serial,status")
         .eq("user_id", user!.id)
         .maybeSingle();
+
       if (error) return null;
+
       return (data as Member | null) ?? null;
     },
   });
@@ -1281,14 +1292,22 @@ function ReelsModal({
         )
         .eq("type", "reel")
         .order("created_at", { ascending: false });
+
       if (error) {
-        console.error("Erreur chargement réels:", error);
+        console.error("Erreur chargement Réels:", error);
         return [];
       }
+
       return (data ?? []) as VideoPost[];
     },
     enabled: open,
   });
+
+  // When a Reel ID is present in the URL, show only that Reel.
+  // Otherwise, preserve the normal list of all Reels.
+  const displayedReels = sharedReelId
+    ? reels.filter((reel) => reel.id === sharedReelId)
+    : reels;
 
   const { data: myLikedIds = new Set<string>() } = useQuery({
     queryKey: ["my-video-likes", user?.id],
@@ -1298,8 +1317,10 @@ function ReelsModal({
         .from("video_likes")
         .select("video_id")
         .eq("user_id", user!.id);
+
       if (error) return new Set();
-      return new Set((data ?? []).map((l: any) => l.video_id));
+
+      return new Set((data ?? []).map((like: any) => like.video_id));
     },
   });
 
@@ -1311,7 +1332,9 @@ function ReelsModal({
     }
 
     if (myLikedIds.has(reel.id)) {
-      setLikeActionMsg("Vous avez déjà attribué votre j'aime 💜 à ce Réel");
+      setLikeActionMsg(
+        "Vous avez déjà attribué votre j'aime 💜 à ce Réel"
+      );
       setTimeout(() => setLikeActionMsg(null), 2500);
       return;
     }
@@ -1324,11 +1347,14 @@ function ReelsModal({
 
       if (!error) {
         setLikeActionMsg("J'aime enregistré 💜 !");
-        queryClient.invalidateQueries({ queryKey: ["my-video-likes", user.id] });
+        queryClient.invalidateQueries({
+          queryKey: ["my-video-likes", user.id],
+        });
         queryClient.invalidateQueries({ queryKey: ["videos"] });
       } else {
         setLikeActionMsg("Vous avez déjà aimé ce Réel 💜");
       }
+
       setTimeout(() => setLikeActionMsg(null), 2500);
     } catch {
       setLikeActionMsg("Erreur lors du j'aime.");
@@ -1357,8 +1383,11 @@ function ReelsModal({
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Film className="h-4 w-4" />
               </span>
-              <h3 className="text-sm font-bold text-foreground">Espace Réels</h3>
+              <h3 className="text-sm font-bold text-foreground">
+                Espace Réels
+              </h3>
             </div>
+
             <button
               type="button"
               onClick={onClose}
@@ -1373,29 +1402,40 @@ function ReelsModal({
               <div className="h-full flex items-center justify-center text-xs text-muted-foreground animate-pulse">
                 Chargement des Réels...
               </div>
-            ) : reels.length === 0 ? (
+            ) : displayedReels.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <Film className="h-7 w-7" />
                 </div>
-                <h4 className="text-sm font-bold text-foreground">Aucun Réel pour le moment</h4>
+
+                <h4 className="text-sm font-bold text-foreground">
+                  {sharedReelId
+                    ? "Ce Réel est introuvable"
+                    : "Aucun Réel pour le moment"}
+                </h4>
+
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Soyez le premier membre vérifié à publier un Réel vertical pour la communauté !
+                  {sharedReelId
+                    ? "Ce Réel n'est peut-être plus disponible ou vous n'avez pas accès à son contenu."
+                    : "Soyez le premier membre vérifié à publier un Réel vertical pour la communauté !"}
                 </p>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenPublishReel();
-                  }}
-                  className="mt-2 rounded-xl bg-gradient-to-r from-primary to-accent font-semibold text-white text-xs"
-                >
-                  Publier un Réel
-                </Button>
+
+                {!sharedReelId && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenPublishReel();
+                    }}
+                    className="mt-2 rounded-xl bg-gradient-to-r from-primary to-accent font-semibold text-white text-xs"
+                  >
+                    Publier un Réel
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
-                {reels.map((reel) => (
+                {displayedReels.map((reel) => (
                   <ReelCardItem
                     key={reel.id}
                     reel={reel}
@@ -1419,12 +1459,12 @@ function ReelsModal({
         currentUserMember={myMember}
       />
 
-              <ShareModal
-          video={activeShareReel}
-          open={!!activeShareReel}
-          onClose={() => setActiveShareReel(null)}
-          sharerSerial={myMember?.serial ?? null}
-        />
+      <ShareModal
+        video={activeShareReel}
+        open={!!activeShareReel}
+        onClose={() => setActiveShareReel(null)}
+        sharerSerial={myMember?.serial ?? null}
+      />
     </>
   );
 }
@@ -1432,15 +1472,49 @@ function ReelsModal({
 // ============================================================================
 // COMPOSANT EXPORTÉ FOOTER
 // ============================================================================
+
 export function Footer() {
   const [showReelsModal, setShowReelsModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
-  const [publishDefaultType, setPublishDefaultType] = useState<MediaType>("video");
+  const [publishDefaultType, setPublishDefaultType] =
+    useState<MediaType>("video");
+
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
   const isHomeActive = currentPath === "/";
   const isProfileActive = currentPath === "/profil";
+
+  // Automatically open the Reels modal for a shared Reel link.
+  useEffect(() => {
+    const sharedVideoId = new URLSearchParams(
+      window.location.search
+    ).get("vid");
+
+    if (!sharedVideoId) return;
+
+    let cancelled = false;
+
+    const checkSharedMedia = async () => {
+      const { data, error } = await supabase
+        .from("videos")
+        .select("id, type")
+        .eq("id", sharedVideoId)
+        .maybeSingle();
+
+      if (cancelled || error || !data) return;
+
+      if (data.type === "reel") {
+        setShowReelsModal(true);
+      }
+    };
+
+    void checkSharedMedia();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
@@ -1461,15 +1535,25 @@ export function Footer() {
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className={`h-5 w-5 ${isHomeActive ? "fill-current" : "fill-none"}`}
+                  className={`h-5 w-5 ${
+                    isHomeActive ? "fill-current" : "fill-none"
+                  }`}
                   stroke="currentColor"
                   strokeWidth={1.8}
                 >
                   <path d="M3 11.5 12 4l9 7.5" />
-                  <path d="M5 10v10h14V10" strokeLinejoin="round" />
+                  <path
+                    d="M5 10v10h14V10"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </span>
-              <span className={isHomeActive ? "text-primary font-semibold" : ""}>
+
+              <span
+                className={
+                  isHomeActive ? "text-primary font-semibold" : ""
+                }
+              >
                 Accueil
               </span>
             </Link>
@@ -1489,11 +1573,24 @@ export function Footer() {
                   stroke="currentColor"
                   strokeWidth={1.8}
                 >
-                  <rect x="2" y="2" width="20" height="20" rx="4" />
-                  <path d="m10 9 6 3-6 3V9z" fill="currentColor" />
-                  <path d="M2 7h20M2 17h20" strokeLinecap="round" />
+                  <rect
+                    x="2"
+                    y="2"
+                    width="20"
+                    height="20"
+                    rx="4"
+                  />
+                  <path
+                    d="m10 9 6 3-6 3V9z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M2 7h20M2 17h20"
+                    strokeLinecap="round"
+                  />
                 </svg>
               </span>
+
               <span>Réels</span>
             </button>
           </li>
@@ -1519,7 +1616,10 @@ export function Footer() {
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
               </span>
-              <span className="text-foreground font-semibold">Publier</span>
+
+              <span className="text-foreground font-semibold">
+                Publier
+              </span>
             </button>
           </li>
 
@@ -1538,7 +1638,9 @@ export function Footer() {
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className={`h-5 w-5 ${isProfileActive ? "fill-current" : "fill-none"}`}
+                  className={`h-5 w-5 ${
+                    isProfileActive ? "fill-current" : "fill-none"
+                  }`}
                   stroke="currentColor"
                   strokeWidth={1.8}
                 >
@@ -1546,7 +1648,12 @@ export function Footer() {
                   <circle cx="12" cy="7" r="4" />
                 </svg>
               </span>
-              <span className={isProfileActive ? "text-primary font-semibold" : ""}>
+
+              <span
+                className={
+                  isProfileActive ? "text-primary font-semibold" : ""
+                }
+              >
                 Profil
               </span>
             </Link>
