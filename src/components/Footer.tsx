@@ -571,6 +571,7 @@ function CommentsModal({
 // ============================================================================
 
 
+
 function ReelCardItem({
   reel,
   isVerifiedMember,
@@ -595,16 +596,51 @@ function ReelCardItem({
   const accumulatedWatchTimeRef = useRef<number>(0);
   const viewRegisteredRef = useRef<boolean>(false);
 
-  // Automatically play the visible Reel and pause all others.
+  // Share the sound preference across all Reel videos on this page.
+  const soundPreferenceKey = "lf-reels-sound-enabled";
+
+  // Apply the saved sound preference and manage autoplay.
   useEffect(() => {
     const video = videoRef.current;
 
-    if (!video || typeof IntersectionObserver === "undefined") return;
+    if (!video) return;
+
+    const applySoundPreference = () => {
+      const soundEnabled =
+        window.sessionStorage.getItem(soundPreferenceKey) === "true";
+
+      video.volume = 0.6;
+      video.muted = !soundEnabled;
+    };
+
+    applySoundPreference();
+
+    // Remember when the viewer changes the mute control.
+    const handleVolumeChange = () => {
+      const soundEnabled = !video.muted && video.volume > 0;
+
+      try {
+        window.sessionStorage.setItem(
+          soundPreferenceKey,
+          String(soundEnabled)
+        );
+      } catch (error) {
+        console.debug("Préférence audio non mémorisée :", error);
+      }
+    };
+
+    video.addEventListener("volumechange", handleVolumeChange);
+
+    if (typeof IntersectionObserver === "undefined") {
+      return () => {
+        video.removeEventListener("volumechange", handleVolumeChange);
+      };
+    }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.intersectionRatio >= 0.6) {
-          // Pause every other Reel before starting this one.
+          // Pause other Reels before starting the current one.
           document
             .querySelectorAll<HTMLVideoElement>(
               'video[data-reel-video="true"]'
@@ -615,7 +651,9 @@ function ReelCardItem({
               }
             });
 
-          // Muted playback allows autoplay on most mobile browsers.
+          // Reapply the shared sound choice before playback.
+          applySoundPreference();
+
           void video.play().catch((error) => {
             console.debug(
               "Lecture automatique indisponible :",
@@ -635,6 +673,7 @@ function ReelCardItem({
 
     return () => {
       observer.disconnect();
+      video.removeEventListener("volumechange", handleVolumeChange);
       video.pause();
     };
   }, []);
@@ -691,7 +730,7 @@ function ReelCardItem({
   ) => {
     const currentVideo = e.currentTarget;
 
-    // Enforce a single playing Reel across the entire Reels list.
+    // Keep only one Reel playing at a time.
     document
       .querySelectorAll<HTMLVideoElement>(
         'video[data-reel-video="true"]'
@@ -701,6 +740,17 @@ function ReelCardItem({
           otherVideo.pause();
         }
       });
+
+    // Preserve the selected sound preference and target volume.
+    try {
+      const soundEnabled =
+        window.sessionStorage.getItem(soundPreferenceKey) === "true";
+
+      currentVideo.volume = 0.6;
+      currentVideo.muted = !soundEnabled;
+    } catch {
+      currentVideo.volume = 0.6;
+    }
 
     lastTimeRef.current = currentVideo.currentTime;
   };
@@ -712,7 +762,6 @@ function ReelCardItem({
         data-reel-video="true"
         controls
         playsInline
-        muted
         loop
         preload="metadata"
         src={reel.video_url}
