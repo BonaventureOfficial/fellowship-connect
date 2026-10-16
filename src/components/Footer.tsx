@@ -1305,9 +1305,21 @@ function ReelsModal({
 
   // When a Reel ID is present in the URL, show only that Reel.
   // Otherwise, preserve the normal list of all Reels.
-  const displayedReels = sharedReelId
-    ? reels.filter((reel) => reel.id === sharedReelId)
-    : reels;
+  
+const displayedReels = sharedReelId
+  ? (() => {
+      const targetedReel = reels.find(
+        (reel) => reel.id === sharedReelId
+      );
+
+      if (!targetedReel) return reels;
+
+      return [
+        targetedReel,
+        ...reels.filter((reel) => reel.id !== sharedReelId),
+      ];
+    })()
+  : reels;
 
   const { data: myLikedIds = new Set<string>() } = useQuery({
     queryKey: ["my-video-likes", user?.id],
