@@ -28,17 +28,17 @@ import { supabase } from "@/integrations/supabase/client";
 // Persistent home-video player
 // -----------------------------------------------------------------------------
 
-export interface PersistentHomeVideoDetail {
+type PersistentHomeVideoDetail = {
   id: string;
   title: string;
-  authorName?: string;
+  authorName: string;
   videoUrl: string;
-  currentTime?: number;
-  muted?: boolean;
-  isVerifiedMember?: boolean;
-  accumulatedWatchTime?: number;
-  viewRegistered?: boolean;
-}
+  currentTime: number;
+  muted: boolean;
+  isVerifiedMember: boolean;
+  accumulatedWatchTime: number;
+  viewRegistered: boolean;
+};
 
 export function PersistentHomeVideoPlayer() {
   const queryClient = useQueryClient();
