@@ -689,8 +689,11 @@ function VideoCard({
     lastTimeRef.current = e.currentTarget.currentTime;
   };
 
-  return (
-    <article className="overflow-hidden rounded-3xl border border-border bg-card shadow-lg transition-all hover:border-primary/40">
+  return (<article
+  id={`lf-video-${video.id}`}
+  className="overflow-hidden rounded-3xl border border-border bg-card shadow-lg transition-all hover:border-primary/40"
+>
+    
       <div className="flex items-center justify-between border-b border-border/50 px-4 py-3 bg-muted/20">
         <div className="flex items-center gap-2.5">
           {video.author_avatar ? (
@@ -841,6 +844,7 @@ function VideoCard({
 // ============================================================================
 // COMPOSANT PRINCIPAL ROUTE ACCUEIL
 // ============================================================================
+
 function HomeComponent() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -850,19 +854,47 @@ function HomeComponent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLightMode, setIsLightMode] = useState(false);
 
-  const [activeCommentsVideo, setActiveCommentsVideo] = useState<VideoPost | null>(null);
-  const [activeShareVideo, setActiveShareVideo] = useState<VideoPost | null>(null);
+  const [activeCommentsVideo, setActiveCommentsVideo] =
+    useState<VideoPost | null>(null);
+  const [activeShareVideo, setActiveShareVideo] =
+    useState<VideoPost | null>(null);
   const [likeActionMsg, setLikeActionMsg] = useState<string | null>(null);
+  const [sharedVideoId, setSharedVideoId] = useState<string | null>(null);
 
+  // Read the shared content ID from the URL.
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const videoId = params.get("vid");
+
+    if (videoId) {
+      setSharedVideoId(videoId);
+      setViewMode("media");
+    }
+  }, []);
+
+  // Skip the welcome screen when opening a shared link.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.has("vid")) {
+      setShowSplash(false);
+      return;
+    }
+
     const seen = window.sessionStorage.getItem("lf-splash-seen");
     if (!seen) setShowSplash(true);
   }, []);
 
+  // Restore the user's selected theme.
   useEffect(() => {
     if (typeof window === "undefined") return;
+
     const stored = window.localStorage.getItem("lf-theme-mode");
+
     if (stored === "light") {
       setIsLightMode(true);
       document.documentElement.classList.add("light");
@@ -877,6 +909,7 @@ function HomeComponent() {
   const toggleTheme = () => {
     const nextLight = !isLightMode;
     setIsLightMode(nextLight);
+
     if (typeof document !== "undefined") {
       if (nextLight) {
         document.documentElement.classList.add("light");
@@ -902,6 +935,7 @@ function HomeComponent() {
         .select("id,user_id,first_name,last_name,avatar_url,serial,status")
         .eq("user_id", user!.id)
         .maybeSingle();
+
       if (error) return null;
       return (data as Member | null) ?? null;
     },
@@ -917,6 +951,7 @@ function HomeComponent() {
         .from("video_likes")
         .select("video_id")
         .eq("user_id", user!.id);
+
       if (error) return new Set();
       return new Set((data ?? []).map((l: any) => l.video_id));
     },
@@ -937,12 +972,85 @@ function HomeComponent() {
     queryFn: fetchVideos,
   });
 
+  // Fetch the exact shared item, including a Reel if it is in the videos table.
+  const {
+    data: sharedVideo = null,
+    isLoading: isLoadingSharedVideo,
+    isError: isSharedVideoError,
+  } = useQuery({
+    queryKey: ["shared-video", sharedVideoId],
+    enabled: !!sharedVideoId,
+    queryFn: async (): Promise<VideoPost | null> => {
+      if (!sharedVideoId) return null;
+
+      const { data, error } = await supabase
+        .from("videos")
+        .select(
+          "id,user_id,author_name,author_serial,author_avatar,type,title,description,video_url,duration_seconds,likes_count,comments_count,views_count,shares_count,created_at"
+        )
+        .eq("id", sharedVideoId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error loading shared content:", error);
+        throw error;
+      }
+
+      return (data as VideoPost | null) ?? null;
+    },
+  });
+
+  // Display only the shared item when a direct content link is opened.
+  const displayedVideos = useMemo(() => {
+    if (!sharedVideoId) return videos;
+
+    const target =
+      videos.find((video) => video.id === sharedVideoId) ??
+      (sharedVideo?.id === sharedVideoId ? sharedVideo : null);
+
+    return target ? [target] : [];
+  }, [videos, sharedVideo, sharedVideoId]);
+
+  // Scroll to the shared item and attempt muted playback.
+  useEffect(() => {
+    if (!sharedVideoId || !sharedVideo || isLoadingSharedVideo) return;
+
+    const timer = window.setTimeout(() => {
+      const card = document.getElementById(`lf-video-${sharedVideoId}`);
+
+      card?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+
+      const player = card?.querySelector("video");
+
+      if (player) {
+        player.muted = true;
+
+        const playPromise = player.play();
+
+        if (playPromise) {
+          playPromise.catch(() => {
+            // Browser autoplay restrictions may require manual playback.
+          });
+        }
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [sharedVideoId, sharedVideo, isLoadingSharedVideo]);
+
   const filteredMembers = useMemo(() => {
     if (!searchQuery.trim()) return members;
+
     const q = searchQuery.toLowerCase().trim();
+
     return members.filter((m) => {
-      const fullName = `${m.first_name ?? ""} ${m.last_name ?? ""}`.toLowerCase();
+      const fullName =
+        `${m.first_name ?? ""} ${m.last_name ?? ""}`.toLowerCase();
       const serial = (m.serial ?? "").toLowerCase();
+
       return fullName.includes(q) || serial.includes(q);
     });
   }, [members, searchQuery]);
@@ -951,10 +1059,11 @@ function HomeComponent() {
     if (typeof window !== "undefined") {
       window.sessionStorage.setItem("lf-splash-seen", "1");
     }
+
     setShowSplash(false);
   };
 
-  // Action Like 💜 (1 like à vie par utilisateur garanti)
+  // Like action: one lifetime like per user.
   const handleLikeVideo = async (video: VideoPost) => {
     if (!user) {
       setLikeActionMsg("Connectez-vous pour aimer ce contenu 💜");
@@ -982,9 +1091,12 @@ function HomeComponent() {
         }
       } else {
         setLikeActionMsg("J'aime enregistré 💜 !");
-        queryClient.invalidateQueries({ queryKey: ["my-video-likes", user.id] });
+        queryClient.invalidateQueries({
+          queryKey: ["my-video-likes", user.id],
+        });
         queryClient.invalidateQueries({ queryKey: ["videos"] });
       }
+
       setTimeout(() => setLikeActionMsg(null), 2500);
     } catch {
       setLikeActionMsg("Erreur réseau lors du j'aime.");
@@ -1002,7 +1114,7 @@ function HomeComponent() {
         </div>
       )}
 
-      {/* HEADER FIXE */}
+      {/* FIXED HEADER */}
       <header className="fixed top-0 inset-x-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl transition-colors shadow-sm">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-2.5">
           <button
@@ -1033,7 +1145,12 @@ function HomeComponent() {
             }`}
             title="Cliquez pour afficher la communauté"
           >
-            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none" stroke="currentColor" strokeWidth={2.2}>
+            <svg
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5 fill-none"
+              stroke="currentColor"
+              strokeWidth={2.2}
+            >
               <circle cx="11" cy="11" r="7" />
               <path d="m20 20-3.5-3.5" strokeLinecap="round" />
             </svg>
@@ -1049,7 +1166,12 @@ function HomeComponent() {
               className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/80 text-muted-foreground transition-colors hover:text-foreground hover:border-primary/50"
               title="Notifications et annonces officielles"
             >
-              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none" stroke="currentColor" strokeWidth={2}>
+              <svg
+                viewBox="0 0 24 24"
+                className="h-4 w-4 fill-none"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
                 <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
                 <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
               </svg>
@@ -1067,13 +1189,26 @@ function HomeComponent() {
               title={isLightMode ? "Activer le mode Nuit" : "Activer le mode Jour"}
             >
               {isLightMode ? (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-primary fill-none" stroke="currentColor" strokeWidth={2}>
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4 text-primary fill-none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
                   <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
                 </svg>
               ) : (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-accent fill-none" stroke="currentColor" strokeWidth={2}>
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4 text-accent fill-none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
                   <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" strokeLinecap="round" />
+                  <path
+                    d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+                    strokeLinecap="round"
+                  />
                 </svg>
               )}
             </button>
@@ -1081,7 +1216,7 @@ function HomeComponent() {
         </div>
       </header>
 
-      {/* CONTENU PRINCIPAL */}
+      {/* MAIN CONTENT */}
       <main className="mx-auto max-w-2xl px-4 pt-20 pb-24">
         {viewMode === "community" ? (
           <section>
@@ -1114,8 +1249,13 @@ function HomeComponent() {
                   </button>
                 )}
               </div>
+
               <div className="mt-2 flex items-center justify-between text-[0.7rem] text-muted-foreground">
-                <span>{filteredMembers.length} membre{filteredMembers.length > 1 ? "s" : ""} trouvé{filteredMembers.length > 1 ? "s" : ""}</span>
+                <span>
+                  {filteredMembers.length} membre
+                  {filteredMembers.length > 1 ? "s" : ""} trouvé
+                  {filteredMembers.length > 1 ? "s" : ""}
+                </span>
                 <button
                   type="button"
                   onClick={() => {
@@ -1167,7 +1307,10 @@ function HomeComponent() {
                       className="lf-card-enter"
                       style={{ animationDelay: `${Math.min(i * 60, 400)}ms` }}
                     >
-                      <MemberCard member={m} roles={rolesMap.get(m.user_id) ?? []} />
+                      <MemberCard
+                        member={m}
+                        roles={rolesMap.get(m.user_id) ?? []}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -1180,21 +1323,27 @@ function HomeComponent() {
               <div className="flex items-center gap-1.5">
                 <span className="flex h-2 w-2 rounded-full bg-primary animate-pulse" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Flux Vidéos Living Fellowship
+                  {sharedVideoId ? "Contenu partagé" : "Flux Vidéos Living Fellowship"}
                 </h2>
               </div>
-              <button
-                type="button"
-                onClick={() => refetchVideos()}
-                disabled={isRefetchingVideos}
-                className="flex items-center gap-1 text-[0.7rem] font-semibold text-primary transition-opacity hover:opacity-80 disabled:opacity-50"
-              >
-                <RotateCcw className={`h-3 w-3 ${isRefetchingVideos ? "animate-spin" : ""}`} />
-                <span>Actualiser</span>
-              </button>
+
+              {!sharedVideoId && (
+                <button
+                  type="button"
+                  onClick={() => refetchVideos()}
+                  disabled={isRefetchingVideos}
+                  className="flex items-center gap-1 text-[0.7rem] font-semibold text-primary transition-opacity hover:opacity-80 disabled:opacity-50"
+                >
+                  <RotateCcw
+                    className={`h-3 w-3 ${isRefetchingVideos ? "animate-spin" : ""}`}
+                  />
+                  <span>Actualiser</span>
+                </button>
+              )}
             </div>
 
-            {isLoadingVideos ? (
+            {isLoadingVideos ||
+            (sharedVideoId !== null && isLoadingSharedVideo) ? (
               <div className="space-y-4">
                 {[0, 1].map((i) => (
                   <div
@@ -1203,25 +1352,34 @@ function HomeComponent() {
                   />
                 ))}
               </div>
-            ) : videos.length === 0 ? (
+            ) : displayedVideos.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card/60 p-8 text-center backdrop-blur-sm">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-sm shadow-primary/20">
                   <Film className="h-7 w-7" />
                 </div>
                 <h3 className="mt-4 text-base font-bold text-foreground">
-                  Aucune vidéo pour le moment
+                  {sharedVideoId
+                    ? "Contenu partagé introuvable"
+                    : "Aucune vidéo pour le moment"}
                 </h3>
                 <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground">
-                  Le flux vidéo d'Accueil est prêt. Les membres officiellement vérifiés peuvent publier des enseignements, témoignages et actualités.
+                  {sharedVideoId
+                    ? isSharedVideoError
+                      ? "Impossible de charger ce contenu. Vérifiez la connexion ou les autorisations d'accès."
+                      : "Ce contenu n'est pas disponible ou vous n'avez pas l'autorisation de le consulter."
+                    : "Le flux vidéo d'Accueil est prêt. Les membres officiellement vérifiés peuvent publier des enseignements, témoignages et actualités."}
                 </p>
-                <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span>Touchez « Publier » en bas pour commencer</span>
-                </div>
+
+                {!sharedVideoId && (
+                  <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>Touchez « Publier » en bas pour commencer</span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-6">
-                {videos.map((vid) => (
+                {displayedVideos.map((vid) => (
                   <VideoCard
                     key={vid.id}
                     video={vid}
@@ -1245,13 +1403,13 @@ function HomeComponent() {
         onClose={() => setActiveCommentsVideo(null)}
         currentUserMember={myMember}
       />
+
       <ShareModal
         video={activeShareVideo}
         open={!!activeShareVideo}
         onClose={() => setActiveShareVideo(null)}
         sharerSerial={myMember?.serial ?? null}
       />
-      
     </div>
   );
 }
