@@ -665,43 +665,81 @@ function VideoCard({
   }, [video.id]);
 
   // Handoff vers le lecteur flottant quand la carte sort de l'écran
+    // Gestion intelligente : par défaut dans la carte du flux.
+  // Elle flotte uniquement quand on scrolle et qu'elle sort de l'écran.
+  // Si on rescrolle vers la carte, elle reprend sa place sans se dédoubler !
+  // Si on change de page dans l'app, elle continue de flotter et de jouer.
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Si la vidéo est en train de jouer ET qu'elle sort du viewport
-        if (!entry.isIntersecting && !videoEl.paused) {
-          window.dispatchEvent(
-            new CustomEvent("lf:persistent-video-start", {
-              detail: {
-                id: video.id,
-                title: video.title,
-                authorName: video.author_name,
-                videoUrl: video.video_url,
-                currentTime: videoEl.currentTime,
-                muted: videoEl.muted,
-                isVerifiedMember,
-                accumulatedWatchTime: accumulatedWatchTimeRef.current,
-                viewRegistered: viewRegisteredRef.current,
-              },
-            })
-          );
+        const isFloatingActiveForThis =
+          typeof window !== "undefined" &&
+          (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId === video.id;
 
-          // On met en pause la vidéo de la carte (le flottant prend le relais)
-          videoEl.pause();
+        if (!entry.isIntersecting) {
+          // La carte sort de l'écran : si la vidéo jouait, le mini-lecteur flottant prend le relais
+          if (!videoEl.paused) {
+            window.dispatchEvent(
+              new CustomEvent("lf:persistent-video-start", {
+                detail: {
+                  id: video.id,
+                  title: video.title,
+                  authorName: video.author_name,
+                  videoUrl: video.video_url,
+                  currentTime: videoEl.currentTime,
+                  muted: videoEl.muted,
+                  isVerifiedMember,
+                  accumulatedWatchTime: accumulatedWatchTimeRef.current,
+                  viewRegistered: viewRegisteredRef.current,
+                },
+              })
+            );
+            videoEl.pause();
+          }
+        } else {
+          // La carte revient à l'écran :
+          // Si cette même vidéo est en train de flotter, on reprend la lecture dans la carte et on ferme le flottant !
+          if (isFloatingActiveForThis) {
+            const floatTime = (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime;
+            if (typeof floatTime === "number" && floatTime >= 0) {
+              videoEl.currentTime = floatTime;
+            }
+            window.dispatchEvent(new CustomEvent("lf:persistent-video-close"));
+            void videoEl.play().catch(() => {});
+          }
         }
       },
       {
-        threshold: 0.25,
-        rootMargin: "0px 0px -80px 0px",
+        threshold: 0.2,
       }
     );
 
     observer.observe(videoEl);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      // Si on quitte la page d'accueil pendant que la vidéo joue : elle continue dans le mini-lecteur flottant !
+      if (!videoEl.paused) {
+        window.dispatchEvent(
+          new CustomEvent("lf:persistent-video-start", {
+            detail: {
+              id: video.id,
+              title: video.title,
+              authorName: video.author_name,
+              videoUrl: video.video_url,
+              currentTime: videoEl.currentTime,
+              muted: videoEl.muted,
+              isVerifiedMember,
+              accumulatedWatchTime: accumulatedWatchTimeRef.current,
+              viewRegistered: viewRegisteredRef.current,
+            },
+          })
+        );
+      }
+    };
   }, [
     video.id,
     video.title,
