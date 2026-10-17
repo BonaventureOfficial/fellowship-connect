@@ -624,7 +624,6 @@ function CommentsModal({
 // CARTE VIDÉO AVEC COMPTEUR DE VUES STRICT (30s VIDÉO, VÉRIFIÉ SEULEMENT, 24H)
 // ET GESTION DES AIMES (💜 UNIQUE À VIE) ET COMMENTAIRES / PARTAGE
 // ============================================================================
-
 function VideoCard({
   video,
   isVerifiedMember,
