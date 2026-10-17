@@ -25,7 +25,7 @@ import { Footer } from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 
 // -----------------------------------------------------------------------------
-// Persistent home-video player (Architecture PiP Pro)
+// Persistent home-video player (Architecture PiP Pro Ultra-Fluide)
 // -----------------------------------------------------------------------------
 type PersistentHomeVideoDetail = {
   id: string;
@@ -43,7 +43,13 @@ function PersistentHomeVideoPlayer() {
   const queryClient = useQueryClient();
   const [video, setVideo] = useState<PersistentHomeVideoDetail | null>(null);
 
-  const [playerWidth, setPlayerWidth] = useState(320);
+  const [playerWidth, setPlayerWidth] = useState(() => {
+    if (typeof window !== "undefined") {
+      return Math.min(320, Math.max(220, window.innerWidth - 32));
+    }
+    return 300;
+  });
+
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [showPlayOverlay, setShowPlayOverlay] = useState(false);
@@ -57,28 +63,35 @@ function PersistentHomeVideoPlayer() {
   const viewRegisteredRef = useRef(false);
   const requestInProgressRef = useRef(false);
 
-  // Suivi temps réel hors state React pour 0 lag et 0 coupure
-  const gestureRef = useRef({
-    isActive: false,
-    isPinch: false,
-    hasMoved: false,
-    startX: 0,
-    startY: 0,
-    originLeft: 0,
-    originTop: 0,
-    deltaX: 0,
-    deltaY: 0,
-    startDist: 0,
-    startWidth: 320,
-    currentScale: 1,
-    suppressTapUntil: 0,
-  });
-
-  const widthRef = useRef(320);
+  // Synchronisation des dimensions et position en refs pour les événements sans reflow
+  const widthRef = useRef(playerWidth);
   widthRef.current = playerWidth;
 
   const posRef = useRef<{ left: number; top: number } | null>(null);
   posRef.current = position;
+
+  // État gestuel haute performance (100% hors cycle de rendu React)
+  const gestureRef = useRef({
+    isActive: false,
+    isPinch: false,
+    hasMoved: false,
+    startTime: 0,
+    // Coordonnées de départ
+    startX: 0,
+    startY: 0,
+    originLeft: 0,
+    originTop: 0,
+    // Déplacements actuels
+    deltaX: 0,
+    deltaY: 0,
+    // Données de pincement (2 doigts)
+    startDist: 0,
+    startWidth: 300,
+    currentScale: 1,
+    // Anti-tap parasite
+    suppressTapUntil: 0,
+    animFrameId: 0,
+  });
 
   // Réception des événements de lecture persistante
   useEffect(() => {
@@ -87,6 +100,7 @@ function PersistentHomeVideoPlayer() {
       const detail = customEvent.detail;
       if (!detail || !detail.id || !detail.videoUrl) return;
 
+      // Pause les autres vidéos actives
       document.querySelectorAll<HTMLVideoElement>("video").forEach((otherVideo) => {
         if (otherVideo.dataset.lfPersistentHomeVideo !== "true" && !otherVideo.paused) {
           otherVideo.pause();
@@ -118,7 +132,7 @@ function PersistentHomeVideoPlayer() {
     };
   }, []);
 
-  // Reprise du timing
+  // Reprise du timing fluide
   useEffect(() => {
     const playerVideo = videoRef.current;
     if (!video || !playerVideo) return;
@@ -145,10 +159,10 @@ function PersistentHomeVideoPlayer() {
     };
   }, [video?.id, video?.videoUrl]);
 
-  // Délimitation dans la fenêtre
+  // Délimitation dans la fenêtre avec marges de sécurité
   const clampBounds = useCallback((left: number, top: number, width: number) => {
     const player = playerRef.current;
-    const height = player ? player.getBoundingClientRect().height : (width * 9) / 16 + 44;
+    const height = player ? player.getBoundingClientRect().height : (width * 9) / 16 + 40;
     const maxLeft = Math.max(8, window.innerWidth - width - 8);
     const maxTop = Math.max(8, window.innerHeight - height - 8);
 
@@ -158,12 +172,54 @@ function PersistentHomeVideoPlayer() {
     };
   }, []);
 
-  // Gestion Tactile Haute Performance : 2 doigts (pinch) et 1 doigt (drag)
+  // Application des styles GPU directs (sans reflow)
+  const applyGpuTransform = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const g = gestureRef.current;
+
+    if (g.isPinch) {
+      player.style.transform = `translate3d(${g.deltaX}px, ${g.deltaY}px, 0) scale(${g.currentScale})`;
+      player.style.transformOrigin = "center center";
+    } else {
+      player.style.transform = `translate3d(${g.deltaX}px, ${g.deltaY}px, 0)`;
+      player.style.transformOrigin = "top left";
+    }
+    player.style.transition = "none";
+  }, []);
+
+  // Bascule Play/Pause au simple tap
+  const togglePlayPause = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+
+    if (v.paused) {
+      void v.play().then(() => setIsPlaying(true)).catch(() => {});
+    } else {
+      v.pause();
+      setIsPlaying(false);
+    }
+    setShowPlayOverlay(true);
+    setTimeout(() => setShowPlayOverlay(false), 700);
+  }, []);
+
+  // Fermeture du lecteur
+  const closePlayer = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+    lastTimeRef.current = null;
+    setVideo(null);
+  }, []);
+
+  // GESTION TACTILE MOBILE ULTRA-PRO : 2 DOIGTS (PINCH-TO-ZOOM) & 1 DOIGT (DRAG LIBRE)
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
 
     const onTouchStart = (e: TouchEvent) => {
+      // Ignorer les clics sur le bouton fermer
       if ((e.target as HTMLElement).closest("button")) return;
 
       const rect = player.getBoundingClientRect();
@@ -173,6 +229,7 @@ function PersistentHomeVideoPlayer() {
       const g = gestureRef.current;
       g.isActive = true;
       g.hasMoved = false;
+      g.startTime = Date.now();
       g.deltaX = 0;
       g.deltaY = 0;
       g.originLeft = curLeft;
@@ -180,6 +237,7 @@ function PersistentHomeVideoPlayer() {
       g.currentScale = 1;
 
       if (e.touches.length === 2) {
+        // Mode Pinch-to-zoom (2 doigts)
         g.isPinch = true;
         const t1 = e.touches[0];
         const t2 = e.touches[1];
@@ -188,6 +246,7 @@ function PersistentHomeVideoPlayer() {
         g.startX = (t1.clientX + t2.clientX) / 2;
         g.startY = (t1.clientY + t2.clientY) / 2;
       } else if (e.touches.length === 1) {
+        // Mode Déplacement (1 doigt)
         g.isPinch = false;
         g.startX = e.touches[0].clientX;
         g.startY = e.touches[0].clientY;
@@ -198,14 +257,16 @@ function PersistentHomeVideoPlayer() {
       const g = gestureRef.current;
       if (!g.isActive) return;
 
-      // Empêche le défilement de la page arrière
-      e.preventDefault();
+      // Empêche le défilement et le zoom de la page arrière
+      if (e.cancelable) {
+        e.preventDefault();
+      }
 
-      const minW = 200;
-      const maxW = Math.min(window.innerWidth - 16, 540);
+      const minW = 180;
+      const maxW = Math.min(window.innerWidth - 16, 560);
 
       if (e.touches.length === 2) {
-        // Geste à 2 doigts : Pinch-to-zoom
+        // PINCEMENT À 2 DOIGTS : ZOOM / DÉZOOM PROGRESSIF & DOUX
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
@@ -230,27 +291,28 @@ function PersistentHomeVideoPlayer() {
           g.deltaY = midY - g.startY;
           g.hasMoved = true;
 
-          // Rendu GPU direct : 0 reflow = lecture continue sans saccade
-          player.style.transform = `translate3d(${g.deltaX}px, ${g.deltaY}px, 0) scale(${g.currentScale})`;
-          player.style.transformOrigin = "center center";
-          player.style.transition = "none";
+          // Rendu GPU direct à 60 FPS
+          cancelAnimationFrame(g.animFrameId);
+          g.animFrameId = requestAnimationFrame(applyGpuTransform);
         }
       } else if (e.touches.length === 1 && !g.isPinch) {
-        // Geste à 1 doigt : Drag
+        // DÉPLACEMENT À 1 DOIGT : FLUIDE ET LIBRE PARTOUT SUR L'ÉCRAN
         const curX = e.touches[0].clientX;
         const curY = e.touches[0].clientY;
         const dX = curX - g.startX;
         const dY = curY - g.startY;
 
-        if (!g.hasMoved && Math.hypot(dX, dY) > 6) {
+        if (!g.hasMoved && Math.hypot(dX, dY) > 5) {
           g.hasMoved = true;
         }
 
         if (g.hasMoved) {
           g.deltaX = dX;
           g.deltaY = dY;
-          player.style.transform = `translate3d(${g.deltaX}px, ${g.deltaY}px, 0)`;
-          player.style.transition = "none";
+
+          // Rendu GPU direct à 60 FPS
+          cancelAnimationFrame(g.animFrameId);
+          g.animFrameId = requestAnimationFrame(applyGpuTransform);
         }
       }
     };
@@ -261,34 +323,38 @@ function PersistentHomeVideoPlayer() {
 
       if (e.touches.length === 0) {
         g.isActive = false;
+        cancelAnimationFrame(g.animFrameId);
 
         if (g.hasMoved) {
-          g.suppressTapUntil = Date.now() + 350;
+          g.suppressTapUntil = Date.now() + 300;
 
           const finalW = Math.round(widthRef.current * (g.isPinch ? g.currentScale : 1));
           const targetLeft = g.originLeft + g.deltaX - (finalW - widthRef.current) / 2;
           const targetTop = g.originTop + g.deltaY;
           const clamped = clampBounds(targetLeft, targetTop, finalW);
 
-          // Réinitialisation du transform GPU et synchronisation
+          // Réinitialisation douce sans saccade
           player.style.transform = "";
           player.style.transition = "";
 
           setPlayerWidth(finalW);
           setPosition(clamped);
         } else {
-          // Si les doigts n'ont pas bougé : Tap Play/Pause
-          if (Date.now() > g.suppressTapUntil) {
+          // Simple tap rapide sans mouvement (< 280ms) : Play / Pause
+          const elapsed = Date.now() - g.startTime;
+          if (elapsed < 280 && Date.now() > g.suppressTapUntil) {
             togglePlayPause();
           }
         }
       } else if (e.touches.length === 1 && g.isPinch) {
+        // Transition douce si un doigt reste posé après un pincement
         g.isPinch = false;
         g.startX = e.touches[0].clientX;
         g.startY = e.touches[0].clientY;
       }
     };
 
+    // Écouteurs optimisés
     player.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
@@ -299,10 +365,11 @@ function PersistentHomeVideoPlayer() {
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("touchcancel", onTouchEnd);
+      cancelAnimationFrame(gestureRef.current.animFrameId);
     };
-  }, [clampBounds]);
+  }, [applyGpuTransform, clampBounds, togglePlayPause]);
 
-  // Support Souris sur ordinateur
+  // SUPPORT SOURIS ORDINATEUR (DRAG FLUIDE)
   const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest("button")) return;
 
@@ -315,6 +382,7 @@ function PersistentHomeVideoPlayer() {
 
     const startX = e.clientX;
     const startY = e.clientY;
+    const startTime = Date.now();
     let hasMoved = false;
 
     const onMouseMove = (ev: MouseEvent) => {
@@ -331,21 +399,22 @@ function PersistentHomeVideoPlayer() {
       }
     };
 
-    const onMouseUp = () => {
+    const onMouseUp = (ev: MouseEvent) => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
 
       if (hasMoved) {
         gestureRef.current.suppressTapUntil = Date.now() + 300;
-        const dX = gestureRef.current.deltaX;
-        const dY = gestureRef.current.deltaY;
+        const dX = ev.clientX - startX;
+        const dY = ev.clientY - startY;
         const clamped = clampBounds(curLeft + dX, curTop + dY, widthRef.current);
 
         player.style.transform = "";
         player.style.transition = "";
         setPosition(clamped);
       } else {
-        if (Date.now() > gestureRef.current.suppressTapUntil) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 280 && Date.now() > gestureRef.current.suppressTapUntil) {
           togglePlayPause();
         }
       }
@@ -355,30 +424,7 @@ function PersistentHomeVideoPlayer() {
     window.addEventListener("mouseup", onMouseUp);
   };
 
-  // Bascule Play/Pause au tap
-  const togglePlayPause = () => {
-    const v = videoRef.current;
-    if (!v) return;
-
-    if (v.paused) {
-      void v.play().then(() => setIsPlaying(true)).catch(() => {});
-    } else {
-      v.pause();
-      setIsPlaying(false);
-    }
-    setShowPlayOverlay(true);
-    setTimeout(() => setShowPlayOverlay(false), 900);
-  };
-
-  const closePlayer = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (videoRef.current) {
-      videoRef.current.pause();
-    }
-    lastTimeRef.current = null;
-    setVideo(null);
-  };
-
+  // Enregistrement des vues qualifiées
   const registerQualifiedView = () => {
     if (
       !video ||
@@ -439,46 +485,46 @@ function PersistentHomeVideoPlayer() {
     <div
       ref={playerRef}
       onMouseDown={onMouseDown}
-      className="fixed z-[100] overflow-hidden rounded-2xl border border-primary/40 bg-card shadow-2xl select-none"
+      className="fixed z-[100] overflow-hidden rounded-2xl border-2 border-primary/50 bg-card/95 shadow-2xl backdrop-blur-xl select-none"
       style={{
         width: `${playerWidth}px`,
         maxWidth: "calc(100vw - 16px)",
-        right: position ? "auto" : "8px",
-        bottom: position ? "auto" : "88px",
+        right: position ? "auto" : "12px",
+        bottom: position ? "auto" : "86px",
         left: position ? `${position.left}px` : undefined,
         top: position ? `${position.top}px` : undefined,
         touchAction: "none",
         cursor: "grab",
         willChange: "transform, width",
       }}
-      aria-label="Lecteur vidéo flottant"
+      aria-label="Mini lecteur vidéo flottant"
     >
-      {/* Barre supérieure épurée */}
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-background px-3 py-2">
+      {/* Barre supérieure épurée et ultra-compacte (Pas de bouton + ni -) */}
+      <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-background/90 px-3 py-1.5 cursor-grab active:cursor-grabbing">
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-bold text-foreground">
             {video.title}
           </p>
           {video.authorName && (
-            <p className="truncate text-[0.68rem] text-muted-foreground">
+            <p className="truncate text-[0.65rem] text-muted-foreground font-medium">
               {video.authorName}
             </p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-sm hover:bg-destructive hover:text-destructive-foreground transition-colors cursor-pointer"
-            onClick={closePlayer}
-            aria-label="Fermer le lecteur"
-            title="Fermer"
-          >
-            ×
-          </button>
-        </div>
+
+        {/* Bouton fermeture discret */}
+        <button
+          type="button"
+          className="flex h-6 w-6 items-center justify-center rounded-lg border border-border/80 bg-background/80 text-muted-foreground hover:bg-destructive hover:text-white transition-colors cursor-pointer shrink-0"
+          onClick={closePlayer}
+          aria-label="Fermer le lecteur"
+          title="Fermer"
+        >
+          <span className="text-xs font-bold leading-none">✕</span>
+        </button>
       </div>
 
-      {/* Surface Vidéo avec Déplacement libre et Pinch-to-zoom 2 doigts */}
+      {/* Surface Vidéo active avec lecture continue ininterrompue */}
       <div className="relative aspect-video w-full bg-black overflow-hidden">
         <video
           ref={videoRef}
@@ -501,10 +547,10 @@ function PersistentHomeVideoPlayer() {
           aria-label={video.title}
         />
 
-        {/* Indicateur visuel Play/Pause au simple tap */}
+        {/* Indicateur visuel Play/Pause discret au simple tap */}
         {showPlayOverlay && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none transition-opacity">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-background/80 text-foreground text-xl shadow-lg">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-background/90 text-foreground text-lg shadow-xl backdrop-blur-sm">
               {isPlaying ? "▶" : "❚❚"}
             </span>
           </div>
@@ -626,10 +672,6 @@ export const Route = createRootRouteWithContext<{
       {
         name: "apple-mobile-web-app-status-bar-style",
         content: "black-translucent",
-      },
-      {
-        name: "apple-mobile-web-app-title",
-        content: "Living Fellowship",
       },
       {
         name: "application-name",
