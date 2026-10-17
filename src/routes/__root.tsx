@@ -38,7 +38,6 @@ type PersistentHomeVideoDetail = {
   accumulatedWatchTime: number;
   viewRegistered: boolean;
 };
-
 function PersistentHomeVideoPlayer() {
   const queryClient = useQueryClient();
   const [video, setVideo] = useState<PersistentHomeVideoDetail | null>(null);
@@ -559,6 +558,7 @@ function PersistentHomeVideoPlayer() {
     </div>
   );
 }
+
 // -----------------------------------------------------------------------------
 // Not found page
 // -----------------------------------------------------------------------------
