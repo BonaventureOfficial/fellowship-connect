@@ -26,6 +26,7 @@ import {
   X,
   ExternalLink,
   Copy,
+  PictureInPicture2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
