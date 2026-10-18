@@ -27,6 +27,9 @@ import { supabase } from "@/integrations/supabase/client";
 // -----------------------------------------------------------------------------
 // Persistent home-video player (Architecture PiP Pro Ultra-Fluide)
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// Persistent home-video player (Architecture PiP Pro Ultra-Fluide & Tactile)
+// -----------------------------------------------------------------------------
 type PersistentHomeVideoDetail = {
   id: string;
   title: string;
@@ -38,6 +41,7 @@ type PersistentHomeVideoDetail = {
   accumulatedWatchTime: number;
   viewRegistered: boolean;
 };
+
 function PersistentHomeVideoPlayer() {
   const queryClient = useQueryClient();
   const [video, setVideo] = useState<PersistentHomeVideoDetail | null>(null);
@@ -73,6 +77,7 @@ function PersistentHomeVideoPlayer() {
   const gestureRef = useRef({
     isActive: false,
     isPinch: false,
+    isResizing: false,
     hasMoved: false,
     startTime: 0,
     // Coordonnées de départ
@@ -83,7 +88,7 @@ function PersistentHomeVideoPlayer() {
     // Déplacements actuels
     deltaX: 0,
     deltaY: 0,
-    // Données de pincement (2 doigts)
+    // Données de pincement (2 doigts) / resize (1 doigt)
     startDist: 0,
     startWidth: 300,
     currentScale: 1,
@@ -91,6 +96,46 @@ function PersistentHomeVideoPlayer() {
     suppressTapUntil: 0,
     animFrameId: 0,
   });
+
+  // Délimitation dans la fenêtre avec marges de sécurité
+  const clampBounds = useCallback((left: number, top: number, width: number) => {
+    const player = playerRef.current;
+    const height = player ? player.getBoundingClientRect().height : (width * 9) / 16 + 40;
+    const maxLeft = Math.max(8, window.innerWidth - width - 8);
+    const maxTop = Math.max(8, window.innerHeight - height - 8);
+
+    return {
+      left: Math.min(maxLeft, Math.max(8, left)),
+      top: Math.min(maxTop, Math.max(8, top)),
+    };
+  }, []);
+
+  // Initialisation stable de la position dès que la vidéo apparaît
+  useEffect(() => {
+    if (!video) {
+      if (typeof window !== "undefined") {
+        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = null;
+        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = null;
+      }
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = video.id;
+      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = video.currentTime;
+
+      // Position par défaut calculée en pixels réels si aucune position n'est encore définie
+      setPosition((prev) => {
+        if (prev) return prev;
+        const initialW = widthRef.current;
+        const initialH = (initialW * 9) / 16 + 40;
+        return {
+          left: Math.max(8, window.innerWidth - initialW - 12),
+          top: Math.max(8, window.innerHeight - initialH - 86),
+        };
+      });
+    }
+  }, [video]);
 
   // Réception des événements de lecture persistante
   useEffect(() => {
@@ -119,6 +164,10 @@ function PersistentHomeVideoPlayer() {
         videoRef.current.pause();
       }
       lastTimeRef.current = null;
+      if (typeof window !== "undefined") {
+        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = null;
+        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = null;
+      }
       setVideo(null);
     };
 
@@ -158,19 +207,6 @@ function PersistentHomeVideoPlayer() {
     };
   }, [video?.id, video?.videoUrl]);
 
-  // Délimitation dans la fenêtre avec marges de sécurité
-  const clampBounds = useCallback((left: number, top: number, width: number) => {
-    const player = playerRef.current;
-    const height = player ? player.getBoundingClientRect().height : (width * 9) / 16 + 40;
-    const maxLeft = Math.max(8, window.innerWidth - width - 8);
-    const maxTop = Math.max(8, window.innerHeight - height - 8);
-
-    return {
-      left: Math.min(maxLeft, Math.max(8, left)),
-      top: Math.min(maxTop, Math.max(8, top)),
-    };
-  }, []);
-
   // Application des styles GPU directs (sans reflow)
   const applyGpuTransform = useCallback(() => {
     const player = playerRef.current;
@@ -203,49 +239,70 @@ function PersistentHomeVideoPlayer() {
   }, []);
 
   // Fermeture du lecteur
-  const closePlayer = useCallback((e: React.MouseEvent) => {
+  const closePlayer = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     if (videoRef.current) {
       videoRef.current.pause();
     }
     lastTimeRef.current = null;
+    if (typeof window !== "undefined") {
+      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = null;
+      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = null;
+    }
     setVideo(null);
   }, []);
 
-  // GESTION TACTILE MOBILE ULTRA-PRO : 2 DOIGTS (PINCH-TO-ZOOM) & 1 DOIGT (DRAG LIBRE)
+  // Double-tap pour alterner taille normale et grand format
+  const handleDoubleTapToggleSize = useCallback(() => {
+    const minW = Math.min(240, window.innerWidth - 32);
+    const maxW = Math.min(window.innerWidth - 16, 480);
+    const nextW = widthRef.current >= 340 ? minW : maxW;
+    setPlayerWidth(nextW);
+    if (posRef.current) {
+      setPosition(clampBounds(posRef.current.left, posRef.current.top, nextW));
+    }
+  }, [clampBounds]);
+
+  // GESTION TACTILE MOBILE COMPLÈTE : DRAG, PINCH-TO-ZOOM, REDIMENSIONNEMENT PAR POIGNÉE
   useEffect(() => {
     const player = playerRef.current;
-    if (!player) return;
+    if (!player || !video) return;
+
+    let lastTapTime = 0;
 
     const onTouchStart = (e: TouchEvent) => {
-      // Ignorer les clics sur le bouton fermer
-      if ((e.target as HTMLElement).closest("button")) return;
+      const target = e.target as HTMLElement;
+      if (target.closest("button")) return;
 
       const rect = player.getBoundingClientRect();
       const curLeft = posRef.current?.left ?? rect.left;
       const curTop = posRef.current?.top ?? rect.top;
 
+      const isHandle = Boolean(target.closest("[data-resize-handle='true']"));
+
       const g = gestureRef.current;
       g.isActive = true;
       g.hasMoved = false;
+      g.isResizing = isHandle;
       g.startTime = Date.now();
       g.deltaX = 0;
       g.deltaY = 0;
       g.originLeft = curLeft;
       g.originTop = curTop;
+      g.startWidth = widthRef.current;
       g.currentScale = 1;
 
       if (e.touches.length === 2) {
         // Mode Pinch-to-zoom (2 doigts)
         g.isPinch = true;
+        g.isResizing = false;
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         g.startDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
-        g.startWidth = widthRef.current;
         g.startX = (t1.clientX + t2.clientX) / 2;
         g.startY = (t1.clientY + t2.clientY) / 2;
       } else if (e.touches.length === 1) {
-        // Mode Déplacement (1 doigt)
+        // Mode Déplacement (1 doigt) ou Redimensionnement par poignée
         g.isPinch = false;
         g.startX = e.touches[0].clientX;
         g.startY = e.touches[0].clientY;
@@ -256,7 +313,6 @@ function PersistentHomeVideoPlayer() {
       const g = gestureRef.current;
       if (!g.isActive) return;
 
-      // Empêche le défilement et le zoom de la page arrière
       if (e.cancelable) {
         e.preventDefault();
       }
@@ -265,13 +321,14 @@ function PersistentHomeVideoPlayer() {
       const maxW = Math.min(window.innerWidth - 16, 560);
 
       if (e.touches.length === 2) {
-        // PINCEMENT À 2 DOIGTS : ZOOM / DÉZOOM PROGRESSIF & DOUX
+        // PINCH-TO-ZOOM : 2 DOIGTS
         const t1 = e.touches[0];
         const t2 = e.touches[1];
         const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 
         if (!g.isPinch) {
           g.isPinch = true;
+          g.isResizing = false;
           g.startDist = curDist;
           g.startWidth = widthRef.current;
           g.startX = (t1.clientX + t2.clientX) / 2;
@@ -290,28 +347,38 @@ function PersistentHomeVideoPlayer() {
           g.deltaY = midY - g.startY;
           g.hasMoved = true;
 
-          // Rendu GPU direct à 60 FPS
           cancelAnimationFrame(g.animFrameId);
           g.animFrameId = requestAnimationFrame(applyGpuTransform);
         }
-      } else if (e.touches.length === 1 && !g.isPinch) {
-        // DÉPLACEMENT À 1 DOIGT : FLUIDE ET LIBRE PARTOUT SUR L'ÉCRAN
+      } else if (e.touches.length === 1) {
         const curX = e.touches[0].clientX;
         const curY = e.touches[0].clientY;
         const dX = curX - g.startX;
         const dY = curY - g.startY;
 
-        if (!g.hasMoved && Math.hypot(dX, dY) > 5) {
+        if (g.isResizing) {
+          // REDIMENSIONNEMENT TACTILE DIRECT AU DOIGT VIA LA POIGNÉE
+          const targetW = Math.min(maxW, Math.max(minW, g.startWidth + dX));
+          g.currentScale = targetW / g.startWidth;
           g.hasMoved = true;
-        }
-
-        if (g.hasMoved) {
-          g.deltaX = dX;
-          g.deltaY = dY;
-
-          // Rendu GPU direct à 60 FPS
           cancelAnimationFrame(g.animFrameId);
-          g.animFrameId = requestAnimationFrame(applyGpuTransform);
+          g.animFrameId = requestAnimationFrame(() => {
+            if (player) {
+              player.style.width = `${targetW}px`;
+            }
+          });
+        } else if (!g.isPinch) {
+          // DÉPLACEMENT FLUIDE AU DOIGT
+          if (!g.hasMoved && Math.hypot(dX, dY) > 5) {
+            g.hasMoved = true;
+          }
+
+          if (g.hasMoved) {
+            g.deltaX = dX;
+            g.deltaY = dY;
+            cancelAnimationFrame(g.animFrameId);
+            g.animFrameId = requestAnimationFrame(applyGpuTransform);
+          }
         }
       }
     };
@@ -324,7 +391,13 @@ function PersistentHomeVideoPlayer() {
         g.isActive = false;
         cancelAnimationFrame(g.animFrameId);
 
-        if (g.hasMoved) {
+        if (g.isResizing) {
+          g.isResizing = false;
+          g.suppressTapUntil = Date.now() + 300;
+          const finalW = Math.round(player.getBoundingClientRect().width);
+          setPlayerWidth(finalW);
+          setPosition((prev) => clampBounds(prev?.left ?? g.originLeft, prev?.top ?? g.originTop, finalW));
+        } else if (g.hasMoved) {
           g.suppressTapUntil = Date.now() + 300;
 
           const finalW = Math.round(widthRef.current * (g.isPinch ? g.currentScale : 1));
@@ -332,28 +405,36 @@ function PersistentHomeVideoPlayer() {
           const targetTop = g.originTop + g.deltaY;
           const clamped = clampBounds(targetLeft, targetTop, finalW);
 
-          // Réinitialisation douce sans saccade
           player.style.transform = "";
           player.style.transition = "";
 
           setPlayerWidth(finalW);
           setPosition(clamped);
         } else {
-          // Simple tap rapide sans mouvement (< 280ms) : Play / Pause
-          const elapsed = Date.now() - g.startTime;
-          if (elapsed < 280 && Date.now() > g.suppressTapUntil) {
-            togglePlayPause();
+          // Gestion des taps
+          const now = Date.now();
+          const elapsed = now - g.startTime;
+          if (elapsed < 280 && now > g.suppressTapUntil) {
+            if (now - lastTapTime < 300) {
+              handleDoubleTapToggleSize();
+              lastTapTime = 0;
+            } else {
+              lastTapTime = now;
+              setTimeout(() => {
+                if (Date.now() - lastTapTime >= 280 && lastTapTime !== 0) {
+                  togglePlayPause();
+                }
+              }, 280);
+            }
           }
         }
       } else if (e.touches.length === 1 && g.isPinch) {
-        // Transition douce si un doigt reste posé après un pincement
         g.isPinch = false;
         g.startX = e.touches[0].clientX;
         g.startY = e.touches[0].clientY;
       }
     };
 
-    // Écouteurs optimisés
     player.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("touchend", onTouchEnd, { passive: true });
@@ -366,9 +447,9 @@ function PersistentHomeVideoPlayer() {
       window.removeEventListener("touchcancel", onTouchEnd);
       cancelAnimationFrame(gestureRef.current.animFrameId);
     };
-  }, [applyGpuTransform, clampBounds, togglePlayPause]);
+  }, [video?.id, applyGpuTransform, clampBounds, togglePlayPause, handleDoubleTapToggleSize]);
 
-  // SUPPORT SOURIS ORDINATEUR (DRAG FLUIDE)
+  // SUPPORT SOURIS (DRAG & RESIZE SUR ORDINATEUR)
   const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest("button")) return;
 
@@ -451,6 +532,9 @@ function PersistentHomeVideoPlayer() {
   const handleTimeUpdate = (event: React.SyntheticEvent<HTMLVideoElement>) => {
     const playerVideo = event.currentTarget;
     const currentTime = playerVideo.currentTime;
+    if (typeof window !== "undefined") {
+      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = currentTime;
+    }
     const previousTime = lastTimeRef.current;
     if (previousTime !== null && !playerVideo.paused && !playerVideo.seeking) {
       const delta = currentTime - previousTime;
@@ -484,21 +568,21 @@ function PersistentHomeVideoPlayer() {
     <div
       ref={playerRef}
       onMouseDown={onMouseDown}
-      className="fixed z-[100] overflow-hidden rounded-2xl border-2 border-primary/50 bg-card/95 shadow-2xl backdrop-blur-xl select-none"
+      className="fixed z-[100] overflow-hidden rounded-2xl border-2 border-primary/60 bg-card/95 shadow-2xl backdrop-blur-xl select-none touch-none transition-shadow active:shadow-primary/20"
       style={{
         width: `${playerWidth}px`,
         maxWidth: "calc(100vw - 16px)",
-        right: position ? "auto" : "12px",
-        bottom: position ? "auto" : "86px",
         left: position ? `${position.left}px` : undefined,
         top: position ? `${position.top}px` : undefined,
+        right: position ? undefined : "12px",
+        bottom: position ? undefined : "86px",
         touchAction: "none",
         cursor: "grab",
         willChange: "transform, width",
       }}
       aria-label="Mini lecteur vidéo flottant"
     >
-      {/* Barre supérieure épurée et ultra-compacte (Pas de bouton + ni -) */}
+      {/* Barre supérieure épurée avec titre, taille rapide et fermeture */}
       <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-background/90 px-3 py-1.5 cursor-grab active:cursor-grabbing">
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-bold text-foreground">
@@ -511,19 +595,32 @@ function PersistentHomeVideoPlayer() {
           )}
         </div>
 
-        {/* Bouton fermeture discret */}
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded-lg border border-border/80 bg-background/80 text-muted-foreground hover:bg-destructive hover:text-white transition-colors cursor-pointer shrink-0"
-          onClick={closePlayer}
-          aria-label="Fermer le lecteur"
-          title="Fermer"
-        >
-          <span className="text-xs font-bold leading-none">✕</span>
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Bouton bascule de taille rapide */}
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded-lg border border-border/80 bg-background/80 text-[0.65rem] font-bold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
+            onClick={handleDoubleTapToggleSize}
+            title="Agrandir / Réduire la taille"
+            aria-label="Changer de taille"
+          >
+            {playerWidth >= 340 ? "−" : "+"}
+          </button>
+
+          {/* Bouton fermeture */}
+          <button
+            type="button"
+            className="flex h-6 w-6 items-center justify-center rounded-lg border border-border/80 bg-background/80 text-muted-foreground hover:bg-destructive hover:text-white transition-colors cursor-pointer"
+            onClick={closePlayer}
+            aria-label="Fermer le lecteur"
+            title="Fermer"
+          >
+            <span className="text-xs font-bold leading-none">✕</span>
+          </button>
+        </div>
       </div>
 
-      {/* Surface Vidéo active avec lecture continue ininterrompue */}
+      {/* Surface Vidéo active */}
       <div className="relative aspect-video w-full bg-black overflow-hidden">
         <video
           ref={videoRef}
@@ -546,7 +643,7 @@ function PersistentHomeVideoPlayer() {
           aria-label={video.title}
         />
 
-        {/* Indicateur visuel Play/Pause discret au simple tap */}
+        {/* Indicateur visuel Play/Pause au tap */}
         {showPlayOverlay && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none transition-opacity">
             <span className="flex h-11 w-11 items-center justify-center rounded-full bg-background/90 text-foreground text-lg shadow-xl backdrop-blur-sm">
@@ -554,10 +651,22 @@ function PersistentHomeVideoPlayer() {
             </span>
           </div>
         )}
+
+        {/* Poignée tactile de redimensionnement direct au doigt (coin inférieur droit) */}
+        <div
+          data-resize-handle="true"
+          className="absolute bottom-1 right-1 flex h-5 w-5 items-center justify-center rounded-br-lg bg-black/60 text-white/80 cursor-se-resize touch-none select-none z-10"
+          title="Glisser pour agrandir ou réduire"
+        >
+          <svg className="h-3 w-3 rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+          </svg>
+        </div>
       </div>
     </div>
   );
 }
+
 
 // -----------------------------------------------------------------------------
 // Not found page
