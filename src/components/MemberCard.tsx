@@ -16,7 +16,9 @@ export function MemberCard({
 }) {
   const [open, setOpen] = useState(false);
   const avatar = useAvatarUrl(member.avatar_url);
-  const verified = member.status === "Vérifié";
+  const verified =
+  String(member.status ?? "").trim().toLocaleLowerCase("fr") ===
+  "vérifié";
   const name = fullName(member) || "Membre";
 
   // Récupération automatique du rôle pour attribuer le bon badge
