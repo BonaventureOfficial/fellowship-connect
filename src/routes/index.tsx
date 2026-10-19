@@ -1566,7 +1566,7 @@ function HomeComponent() {
   key={vid.id}
   video={vid}
   isVerifiedMember={isVerifiedMember}
-  currentUserId={currentUserId}
+  currentUserId={user?.id ?? null}
   isLikedByMe={myLikedIds.has(vid.id)}
   onOpenComments={() => setActiveCommentsVideo(vid)}
   onOpenShare={() => setActiveShareVideo(vid)}
