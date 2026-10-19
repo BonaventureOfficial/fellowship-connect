@@ -10,6 +10,7 @@ import type { Member } from "@/lib/members";
 import { useRolesMap } from "@/lib/roles";
 import { lfLogo } from "@/lib/assets";
 import { useUnreadAnnouncements } from "@/lib/announcements";
+import { VerificationBadge } from "@/components/PlatinumBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -633,6 +634,8 @@ function VideoCard({
   onOpenComments,
   onOpenShare,
   onToggleLike,
+  authorStatus,
+  authorIsCeo = false,
 }: {
   video: VideoPost;
   isVerifiedMember: boolean;
@@ -641,34 +644,56 @@ function VideoCard({
   onOpenComments: () => void;
   onOpenShare: () => void;
   onToggleLike: () => void;
+  authorStatus?: string | null;
+  authorIsCeo?: boolean;
 }) {
   const [localViewsCount, setLocalViewsCount] = useState<number>(
     video.views_count || 0
   );
-
   const lastTimeRef = useRef<number | null>(null);
   const accumulatedWatchTimeRef = useRef<number>(0);
   const viewRegisteredRef = useRef<boolean>(false);
-
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Keep the view count synchronized if the video data is refreshed.
+  // Normalisation du statut vérifié identique à la Communauté
+  const isAuthorVerified =
+    String(authorStatus ?? "").trim().toLocaleLowerCase("fr") === "vérifié";
+
+  // Synchronisation du compteur si les données changent
   useEffect(() => {
     setLocalViewsCount(video.views_count || 0);
   }, [video.id, video.views_count]);
 
-  // Reset watch-time tracking when a different video is displayed.
+  // Réinitialisation du temps de visionnage si on change de vidéo
   useEffect(() => {
     lastTimeRef.current = null;
     accumulatedWatchTimeRef.current = 0;
     viewRegisteredRef.current = false;
   }, [video.id]);
 
-  // Handoff vers le lecteur flottant quand la carte sort de l'écran
-    // Gestion intelligente : par défaut dans la carte du flux.
-  // Elle flotte uniquement quand on scrolle et qu'elle sort de l'écran.
-  // Si on rescrolle vers la carte, elle reprend sa place sans se dédoubler !
-  // Si on change de page dans l'app, elle continue de flotter et de jouer.
+  // Action manuelle : détacher volontairement la vidéo vers le mini-lecteur flottant
+  const handleDetachPlayer = () => {
+    const videoEl = videoRef.current;
+    if (!videoEl) return;
+    window.dispatchEvent(
+      new CustomEvent("lf:persistent-video-start", {
+        detail: {
+          id: video.id,
+          title: video.title,
+          authorName: video.author_name,
+          videoUrl: video.video_url,
+          currentTime: videoEl.currentTime,
+          muted: videoEl.muted,
+          isVerifiedMember,
+          accumulatedWatchTime: accumulatedWatchTimeRef.current,
+          viewRegistered: viewRegisteredRef.current,
+        },
+      })
+    );
+    videoEl.pause();
+  };
+
+  // Handoff automatique vers le lecteur flottant quand la carte sort de l'écran
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
@@ -680,7 +705,7 @@ function VideoCard({
           (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId === video.id;
 
         if (!entry.isIntersecting) {
-          // La carte sort de l'écran : si la vidéo jouait, le mini-lecteur flottant prend le relais
+          // La carte sort de l'écran : si la vidéo jouait, le mini-lecteur prend le relais
           if (!videoEl.paused) {
             window.dispatchEvent(
               new CustomEvent("lf:persistent-video-start", {
@@ -700,8 +725,7 @@ function VideoCard({
             videoEl.pause();
           }
         } else {
-          // La carte revient à l'écran :
-          // Si cette même vidéo est en train de flotter, on reprend la lecture dans la carte et on ferme le flottant !
+          // La carte revient à l'écran : reprise fluide et fermeture du flottant
           if (isFloatingActiveForThis) {
             const floatTime = (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime;
             if (typeof floatTime === "number" && floatTime >= 0) {
@@ -721,7 +745,6 @@ function VideoCard({
 
     return () => {
       observer.disconnect();
-      // Si on quitte la page d'accueil pendant que la vidéo joue : elle continue dans le mini-lecteur flottant !
       if (!videoEl.paused) {
         window.dispatchEvent(
           new CustomEvent("lf:persistent-video-start", {
@@ -756,20 +779,14 @@ function VideoCard({
 
     if (lastTimeRef.current !== null) {
       const delta = currentTime - lastTimeRef.current;
-
-      // Count forward playback only, excluding large jumps and seeking.
       if (delta > 0 && delta < 1.5 && !videoEl.paused) {
         accumulatedWatchTimeRef.current += delta;
-
-        // Only verified members can register a qualified view.
         if (
           isVerifiedMember &&
           !viewRegisteredRef.current &&
           accumulatedWatchTimeRef.current >= 30
         ) {
-          // Mark before the request to prevent duplicate submissions.
           viewRegisteredRef.current = true;
-
           supabase
             .rpc("record_video_view", {
               p_video_id: video.id,
@@ -779,7 +796,6 @@ function VideoCard({
                 console.error("Error recording video view:", error);
                 return;
               }
-
               if (counted) {
                 setLocalViewsCount((previous) => previous + 1);
               }
@@ -790,14 +806,12 @@ function VideoCard({
         }
       }
     }
-
     lastTimeRef.current = currentTime;
   };
 
   const handleSeeked = (
     e: React.SyntheticEvent<HTMLVideoElement>
   ) => {
-    // Seeking must not count as watched time.
     lastTimeRef.current = e.currentTarget.currentTime;
   };
 
@@ -809,10 +823,9 @@ function VideoCard({
     e: React.SyntheticEvent<HTMLVideoElement>
   ) => {
     const currentVideo = e.currentTarget;
-
     lastTimeRef.current = currentVideo.currentTime;
 
-    // Pause other videos, but never pause this video itself.
+    // Pauser toutes les autres vidéos (y compris les Réels et le lecteur flottant)
     document
       .querySelectorAll<HTMLVideoElement>("video")
       .forEach((otherVideo) => {
@@ -846,9 +859,19 @@ function VideoCard({
           )}
 
           <div>
-            <p className="text-xs font-bold leading-tight text-foreground">
-              {video.author_name}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-xs font-bold leading-tight text-foreground">
+                {video.author_name}
+              </p>
+              {/* Badge officiel original identique à la section Communauté */}
+              {(authorIsCeo || isAuthorVerified) && (
+                <VerificationBadge
+                  isCeo={authorIsCeo}
+                  verified={isAuthorVerified}
+                  className="h-3.5 w-3.5"
+                />
+              )}
+            </div>
 
             <div className="mt-0.5 flex items-center gap-1.5">
               {video.author_serial && (
@@ -872,6 +895,17 @@ function VideoCard({
             <Eye className="h-3 w-3 text-primary" />
             <span>{localViewsCount}</span>
           </span>
+
+          {/* Bouton pour détacher manuellement la vidéo en lecteur flottant */}
+          <button
+            type="button"
+            onClick={handleDetachPlayer}
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background/80 text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+            title="Détacher la vidéo (mini-lecteur flottant)"
+            aria-label="Détacher la vidéo"
+          >
+            <PictureInPicture2 className="h-3.5 w-3.5" />
+          </button>
 
           <button
             type="button"
@@ -1529,15 +1563,24 @@ function HomeComponent() {
               <div className="space-y-6">
                 {displayedVideos.map((vid) => (
                   <VideoCard
-                    key={vid.id}
-                    video={vid}
-                    isVerifiedMember={isVerifiedMember}
-                    currentUserId={user?.id ?? null}
-                    isLikedByMe={myLikedIds.has(vid.id)}
-                    onOpenComments={() => setActiveCommentsVideo(vid)}
-                    onOpenShare={() => setActiveShareVideo(vid)}
-                    onToggleLike={() => handleLikeVideo(vid)}
-                  />
+  key={vid.id}
+  video={vid}
+  isVerifiedMember={isVerifiedMember}
+  currentUserId={currentUserId}
+  isLikedByMe={myLikedIds.has(vid.id)}
+  onOpenComments={() => setActiveCommentsVideo(vid)}
+  onOpenShare={() => setActiveShareVideo(vid)}
+  onToggleLike={() => handleLikeVideo(vid)}
+  authorStatus={
+    members.find(
+      (m) =>
+        m.user_id === vid.user_id ||
+        (Boolean(vid.author_serial) && m.serial === vid.author_serial)
+    )?.status
+  }
+  authorIsCeo={rolesMap.get(vid.user_id)?.includes("ceo")}
+/>
+
                 ))}
               </div>
             )}
