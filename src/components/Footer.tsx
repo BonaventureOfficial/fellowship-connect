@@ -571,7 +571,6 @@ function CommentsModal({
 // ============================================================================
 
 
-
 function ReelCardItem({
   reel,
   isVerifiedMember,
@@ -596,10 +595,8 @@ function ReelCardItem({
   const accumulatedWatchTimeRef = useRef<number>(0);
   const viewRegisteredRef = useRef<boolean>(false);
 
-  // Share the sound preference across all Reel videos on this page.
   const soundPreferenceKey = "lf-reels-sound-enabled";
 
-  // Apply the saved sound preference and manage autoplay.
   useEffect(() => {
     const video = videoRef.current;
 
@@ -615,7 +612,6 @@ function ReelCardItem({
 
     applySoundPreference();
 
-    // Remember when the viewer changes the mute control.
     const handleVolumeChange = () => {
       const soundEnabled = !video.muted && video.volume > 0;
 
@@ -640,25 +636,19 @@ function ReelCardItem({
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.intersectionRatio >= 0.6) {
-          // Pause other Reels before starting the current one.
-              // Pauser TOUTES les autres vidéos (Accueil, lecteur flottant persistant et autres Réels)
-    document
-      .querySelectorAll<HTMLVideoElement>("video")
-      .forEach((otherVideo) => {
-        if (otherVideo !== currentVideo && !otherVideo.paused) {
-          otherVideo.pause();
-        }
-      });
+          // Met en pause toutes les autres vidéos, y compris celles de l'Accueil.
+          document
+            .querySelectorAll<HTMLVideoElement>("video")
+            .forEach((otherVideo) => {
+              if (otherVideo !== video && !otherVideo.paused) {
+                otherVideo.pause();
+              }
+            });
 
-
-          // Reapply the shared sound choice before playback.
           applySoundPreference();
 
           void video.play().catch((error) => {
-            console.debug(
-              "Lecture automatique indisponible :",
-              error
-            );
+            console.debug("Lecture automatique indisponible :", error);
           });
         } else {
           video.pause();
@@ -690,7 +680,6 @@ function ReelCardItem({
       if (delta > 0 && delta < 1.5) {
         accumulatedWatchTimeRef.current += delta;
 
-        // Register a qualified view after 10 seconds of effective playback.
         if (
           isVerifiedMember &&
           !viewRegisteredRef.current &&
@@ -702,11 +691,11 @@ function ReelCardItem({
             .rpc("record_video_view", { p_video_id: reel.id })
             .then(({ data: counted, error }) => {
               if (!error && counted) {
-                setLocalViewsCount((prev) => prev + 1);
+                setLocalViewsCount((previousCount) => previousCount + 1);
               }
             })
-            .catch((err) =>
-              console.error("Erreur enregistrement vue Réel:", err)
+            .catch((error) =>
+              console.error("Erreur enregistrement vue Réel :", error)
             );
         }
       }
@@ -730,18 +719,15 @@ function ReelCardItem({
   ) => {
     const currentVideo = e.currentTarget;
 
-    // Keep only one Reel playing at a time.
+    // Une seule vidéo peut jouer à la fois, dans l'Accueil comme dans les Réels.
     document
-      .querySelectorAll<HTMLVideoElement>(
-        'video[data-reel-video="true"]'
-      )
+      .querySelectorAll<HTMLVideoElement>("video")
       .forEach((otherVideo) => {
         if (otherVideo !== currentVideo && !otherVideo.paused) {
           otherVideo.pause();
         }
       });
 
-    // Preserve the selected sound preference and target volume.
     try {
       const soundEnabled =
         window.sessionStorage.getItem(soundPreferenceKey) === "true";
@@ -756,7 +742,7 @@ function ReelCardItem({
   };
 
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-border bg-black aspect-[9/15] shadow-xl">
+    <div className="relative aspect-[9/15] overflow-hidden rounded-3xl border border-border bg-black shadow-xl">
       <video
         ref={videoRef}
         data-reel-video="true"
@@ -772,8 +758,7 @@ function ReelCardItem({
         className="h-full w-full object-cover"
       />
 
-      <div className="absolute right-2.5 bottom-16 z-20 flex flex-col items-center gap-3">
-        {/* Like */}
+      <div className="absolute bottom-16 right-2.5 z-20 flex flex-col items-center gap-3">
         <button
           type="button"
           onClick={onToggleLike}
@@ -782,23 +767,18 @@ function ReelCardItem({
               ? "bg-purple-600/80 text-white shadow-lg shadow-purple-600/40"
               : "bg-black/60 text-white/90 hover:bg-black/80"
           }`}
-          title={
-            isLikedByMe
-              ? "Vous avez aimé ce Réel 💜"
-              : "Aimer ce Réel 💜"
-          }
+          title={isLikedByMe ? "Vous avez aimé ce Réel 💜" : "Aimer ce Réel 💜"}
         >
           <Heart
             className={`h-5 w-5 ${
-              isLikedByMe ? "fill-white text-white scale-110" : ""
+              isLikedByMe ? "scale-110 fill-white text-white" : ""
             }`}
           />
-          <span className="text-[0.62rem] font-bold leading-none mt-0.5">
+          <span className="mt-0.5 text-[0.62rem] font-bold leading-none">
             {reel.likes_count || 0}
           </span>
         </button>
 
-        {/* Comments */}
         <button
           type="button"
           onClick={onOpenComments}
@@ -806,12 +786,11 @@ function ReelCardItem({
           title="Commentaires"
         >
           <MessageCircle className="h-5 w-5 text-primary" />
-          <span className="text-[0.62rem] font-bold leading-none mt-0.5">
+          <span className="mt-0.5 text-[0.62rem] font-bold leading-none">
             {reel.comments_count || 0}
           </span>
         </button>
 
-        {/* Share */}
         <button
           type="button"
           onClick={onOpenShare}
@@ -819,41 +798,39 @@ function ReelCardItem({
           title="Partager le Réel"
         >
           <Share2 className="h-5 w-5 text-white" />
-          <span className="text-[0.6rem] font-bold leading-none mt-0.5">
+          <span className="mt-0.5 text-[0.6rem] font-bold leading-none">
             Partage
           </span>
         </button>
 
-        {/* Qualified views */}
         <div
-          className="flex h-10 w-10 flex-col items-center justify-center rounded-full bg-black/50 text-white/80 backdrop-blur-md text-center"
+          className="flex h-10 w-10 flex-col items-center justify-center rounded-full bg-black/50 text-center text-white/80 backdrop-blur-md"
           title="Vues qualifiées (comptes vérifiés, >10s)"
         >
           <Eye className="h-3.5 w-3.5 text-primary" />
-          <span className="text-[0.6rem] font-bold leading-none mt-0.5">
+          <span className="mt-0.5 text-[0.6rem] font-bold leading-none">
             {localViewsCount}
           </span>
         </div>
       </div>
 
-      {/* Reel information */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/50 to-transparent p-4 pr-16 text-white">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold">{reel.author_name}</span>
 
           {reel.author_serial && (
-            <span className="rounded-full bg-primary/90 px-1.5 py-0.2 text-[0.62rem] font-bold text-white font-mono">
+            <span className="rounded-full bg-primary/90 px-1.5 py-0.2 font-mono text-[0.62rem] font-bold text-white">
               {reel.author_serial}
             </span>
           )}
         </div>
 
-        <p className="text-xs font-semibold mt-1 line-clamp-1">
+        <p className="mt-1 line-clamp-1 text-xs font-semibold">
           {reel.title}
         </p>
 
         {reel.description && (
-          <p className="text-[0.68rem] text-white/80 line-clamp-2 mt-0.5 leading-snug">
+          <p className="mt-0.5 line-clamp-2 text-[0.68rem] leading-snug text-white/80">
             {reel.description}
           </p>
         )}
@@ -861,6 +838,7 @@ function ReelCardItem({
     </div>
   );
 }
+
 
 // ============================================================================
 // MODAL PUBLIER MONOLITHIQUE
