@@ -641,15 +641,15 @@ function ReelCardItem({
       ([entry]) => {
         if (entry.intersectionRatio >= 0.6) {
           // Pause other Reels before starting the current one.
-          document
-            .querySelectorAll<HTMLVideoElement>(
-              'video[data-reel-video="true"]'
-            )
-            .forEach((otherVideo) => {
-              if (otherVideo !== video) {
-                otherVideo.pause();
-              }
-            });
+              // Pauser TOUTES les autres vidéos (Accueil, lecteur flottant persistant et autres Réels)
+    document
+      .querySelectorAll<HTMLVideoElement>("video")
+      .forEach((otherVideo) => {
+        if (otherVideo !== currentVideo && !otherVideo.paused) {
+          otherVideo.pause();
+        }
+      });
+
 
           // Reapply the shared sound choice before playback.
           applySoundPreference();
