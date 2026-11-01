@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -151,6 +151,27 @@ export type Database = {
         }
         Relationships: []
       }
+      member_follows: {
+        Row: {
+          created_at: string
+          follower_user_id: string
+          following_user_id: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          follower_user_id: string
+          following_user_id: string
+          id?: string
+        }
+        Update: {
+          created_at?: string
+          follower_user_id?: string
+          following_user_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
       members: {
         Row: {
           avatar_url: string | null
@@ -158,6 +179,7 @@ export type Database = {
           first_name: string
           id: string
           last_name: string
+          referred_by: string | null
           serial: string | null
           status: string
           updated_at: string
@@ -169,6 +191,7 @@ export type Database = {
           first_name?: string
           id?: string
           last_name?: string
+          referred_by?: string | null
           serial?: string | null
           status?: string
           updated_at?: string
@@ -180,6 +203,7 @@ export type Database = {
           first_name?: string
           id?: string
           last_name?: string
+          referred_by?: string | null
           serial?: string | null
           status?: string
           updated_at?: string
@@ -291,6 +315,169 @@ export type Database = {
           },
         ]
       }
+      video_comments: {
+        Row: {
+          author_avatar: string | null
+          author_name: string
+          author_serial: string | null
+          content: string
+          created_at: string
+          id: string
+          parent_id: string | null
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          author_avatar?: string | null
+          author_name: string
+          author_serial?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          author_avatar?: string | null
+          author_name?: string
+          author_serial?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          parent_id?: string | null
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_comments_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "video_comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "video_comments_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_likes: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_likes_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      video_views: {
+        Row: {
+          created_at: string
+          id: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_views_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      videos: {
+        Row: {
+          author_avatar: string | null
+          author_name: string | null
+          author_serial: string | null
+          comments_count: number | null
+          created_at: string | null
+          description: string | null
+          duration_seconds: number | null
+          id: string
+          likes_count: number | null
+          shares_count: number | null
+          title: string
+          type: string
+          user_id: string
+          video_url: string
+          views_count: number | null
+        }
+        Insert: {
+          author_avatar?: string | null
+          author_name?: string | null
+          author_serial?: string | null
+          comments_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          likes_count?: number | null
+          shares_count?: number | null
+          title: string
+          type: string
+          user_id: string
+          video_url: string
+          views_count?: number | null
+        }
+        Update: {
+          author_avatar?: string | null
+          author_name?: string | null
+          author_serial?: string | null
+          comments_count?: number | null
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          id?: string
+          likes_count?: number | null
+          shares_count?: number | null
+          title?: string
+          type?: string
+          user_id?: string
+          video_url?: string
+          views_count?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -314,6 +501,7 @@ export type Database = {
         }[]
       }
       lf_remove_admin: { Args: { _user_id: string }; Returns: undefined }
+      record_video_view: { Args: { p_video_id: string }; Returns: boolean }
       review_verification: {
         Args: { _approve: boolean; _request_id: string }
         Returns: undefined
