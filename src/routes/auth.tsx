@@ -75,7 +75,7 @@ function AuthComponent() {
           password,
           options: {
             emailRedirectTo: window.location.origin,
-            data: cleanRef ? { referred_by: cleanRef } : undefined,
+            ...(cleanRef ? { data: { referred_by: cleanRef } } : {}),
           },
         });
         if (error) throw error;

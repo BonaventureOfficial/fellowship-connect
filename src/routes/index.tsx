@@ -5,6 +5,7 @@ import { Splash } from "@/components/Splash";
 import { Billboard } from "@/components/Billboard";
 import { MemberCard } from "@/components/MemberCard";
 import { supabase } from "@/integrations/supabase/client";
+import { mediaClient } from "@/lib/media-client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Member } from "@/lib/members";
 import { useRolesMap } from "@/lib/roles";
@@ -92,7 +93,7 @@ async function fetchMembers(): Promise<Member[]> {
 }
 
 async function fetchVideos(): Promise<VideoPost[]> {
-  const { data, error } = await supabase
+  const { data, error } = await mediaClient
     .from("videos")
     .select(
       "id,user_id,author_name,author_serial,author_avatar,type,title,description,video_url,duration_seconds,likes_count,comments_count,views_count,shares_count,created_at"
@@ -332,7 +333,7 @@ function CommentsModal({
     enabled: open && !!video,
     queryFn: async (): Promise<VideoComment[]> => {
       if (!video) return [];
-      const { data, error } = await supabase
+      const { data, error } = await mediaClient
         .from("video_comments")
         .select(
           "id,video_id,user_id,author_name,author_serial,author_avatar,content,parent_id,created_at"
@@ -383,7 +384,7 @@ function CommentsModal({
         `${currentUserMember?.first_name ?? ""} ${currentUserMember?.last_name ?? ""}`.trim() ||
         "Membre";
 
-      const { error } = await supabase.from("video_comments").insert({
+      const { error } = await mediaClient.from("video_comments").insert({
         video_id: video.id,
         user_id: user.id,
         author_name: authorName,
@@ -700,9 +701,10 @@ function VideoCard({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
+        if (!entry) return;
         const isFloatingActiveForThis =
           typeof window !== "undefined" &&
-          (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId === video.id;
+          (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoId"] === video.id;
 
         if (!entry.isIntersecting) {
           // La carte sort de l'écran : si la vidéo jouait, le mini-lecteur prend le relais
@@ -727,7 +729,7 @@ function VideoCard({
         } else {
           // La carte revient à l'écran : reprise fluide et fermeture du flottant
           if (isFloatingActiveForThis) {
-            const floatTime = (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime;
+            const floatTime = (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoCurrentTime"];
             if (typeof floatTime === "number" && floatTime >= 0) {
               videoEl.currentTime = floatTime;
             }
@@ -787,10 +789,10 @@ function VideoCard({
           accumulatedWatchTimeRef.current >= 30
         ) {
           viewRegisteredRef.current = true;
-          supabase
+          void Promise.resolve(mediaClient
             .rpc("record_video_view", {
               p_video_id: video.id,
-            })
+            }))
             .then(({ data: counted, error }) => {
               if (error) {
                 console.error("Error recording video view:", error);
@@ -1120,7 +1122,7 @@ function HomeComponent() {
     queryKey: ["my-video-likes", user?.id],
     enabled: !!user,
     queryFn: async (): Promise<Set<string>> => {
-      const { data, error } = await supabase
+      const { data, error } = await mediaClient
         .from("video_likes")
         .select("video_id")
         .eq("user_id", user!.id);
@@ -1156,7 +1158,7 @@ function HomeComponent() {
     queryFn: async (): Promise<VideoPost | null> => {
       if (!sharedVideoId) return null;
 
-      const { data, error } = await supabase
+      const { data, error } = await mediaClient
         .from("videos")
         .select(
           "id,user_id,author_name,author_serial,author_avatar,type,title,description,video_url,duration_seconds,likes_count,comments_count,views_count,shares_count,created_at"
@@ -1258,7 +1260,7 @@ function HomeComponent() {
     }
 
     try {
-      const { error } = await supabase.from("video_likes").insert({
+      const { error } = await mediaClient.from("video_likes").insert({
         video_id: video.id,
         user_id: user.id,
       });
@@ -1576,9 +1578,9 @@ function HomeComponent() {
       (m) =>
         m.user_id === vid.user_id ||
         (Boolean(vid.author_serial) && m.serial === vid.author_serial)
-    )?.status
+    )?.status ?? null
   }
-  authorIsCeo={rolesMap.get(vid.user_id)?.includes("ceo")}
+  authorIsCeo={rolesMap.get(vid.user_id)?.includes("ceo") ?? false}
 />
 
                 ))}

@@ -23,6 +23,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Footer } from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
+import { mediaClient } from "@/lib/media-client";
 
 // -----------------------------------------------------------------------------
 // Persistent home-video player (Architecture PiP Pro Ultra-Fluide)
@@ -114,15 +115,15 @@ function PersistentHomeVideoPlayer() {
   useEffect(() => {
     if (!video) {
       if (typeof window !== "undefined") {
-        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = null;
-        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = null;
+        (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoId"] = null;
+        (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoCurrentTime"] = null;
       }
       return;
     }
 
     if (typeof window !== "undefined") {
-      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = video.id;
-      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = video.currentTime;
+      (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoId"] = video.id;
+      (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoCurrentTime"] = video.currentTime;
 
       // Position par défaut calculée en pixels réels si aucune position n'est encore définie
       setPosition((prev) => {
@@ -146,7 +147,7 @@ function PersistentHomeVideoPlayer() {
 
       // Pause les autres vidéos actives
       document.querySelectorAll<HTMLVideoElement>("video").forEach((otherVideo) => {
-        if (otherVideo.dataset.lfPersistentHomeVideo !== "true" && !otherVideo.paused) {
+        if (otherVideo.dataset["lfPersistentHomeVideo"] !== "true" && !otherVideo.paused) {
           otherVideo.pause();
         }
       });
@@ -165,8 +166,8 @@ function PersistentHomeVideoPlayer() {
       }
       lastTimeRef.current = null;
       if (typeof window !== "undefined") {
-        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = null;
-        (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = null;
+        (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoId"] = null;
+        (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoCurrentTime"] = null;
       }
       setVideo(null);
     };
@@ -246,8 +247,8 @@ function PersistentHomeVideoPlayer() {
     }
     lastTimeRef.current = null;
     if (typeof window !== "undefined") {
-      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId = null;
-      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = null;
+      (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoId"] = null;
+      (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoCurrentTime"] = null;
     }
     setVideo(null);
   }, []);
@@ -298,14 +299,17 @@ function PersistentHomeVideoPlayer() {
         g.isResizing = false;
         const t1 = e.touches[0];
         const t2 = e.touches[1];
+        if (!t1 || !t2) return;
         g.startDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
         g.startX = (t1.clientX + t2.clientX) / 2;
         g.startY = (t1.clientY + t2.clientY) / 2;
       } else if (e.touches.length === 1) {
         // Mode Déplacement (1 doigt) ou Redimensionnement par poignée
         g.isPinch = false;
-        g.startX = e.touches[0].clientX;
-        g.startY = e.touches[0].clientY;
+        const touch = e.touches[0];
+        if (!touch) return;
+        g.startX = touch.clientX;
+        g.startY = touch.clientY;
       }
     };
 
@@ -324,6 +328,7 @@ function PersistentHomeVideoPlayer() {
         // PINCH-TO-ZOOM : 2 DOIGTS
         const t1 = e.touches[0];
         const t2 = e.touches[1];
+        if (!t1 || !t2) return;
         const curDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
 
         if (!g.isPinch) {
@@ -351,8 +356,10 @@ function PersistentHomeVideoPlayer() {
           g.animFrameId = requestAnimationFrame(applyGpuTransform);
         }
       } else if (e.touches.length === 1) {
-        const curX = e.touches[0].clientX;
-        const curY = e.touches[0].clientY;
+        const touch = e.touches[0];
+        if (!touch) return;
+        const curX = touch.clientX;
+        const curY = touch.clientY;
         const dX = curX - g.startX;
         const dY = curY - g.startY;
 
@@ -430,8 +437,10 @@ function PersistentHomeVideoPlayer() {
         }
       } else if (e.touches.length === 1 && g.isPinch) {
         g.isPinch = false;
-        g.startX = e.touches[0].clientX;
-        g.startY = e.touches[0].clientY;
+        const touch = e.touches[0];
+        if (!touch) return;
+        g.startX = touch.clientX;
+        g.startY = touch.clientY;
       }
     };
 
@@ -516,13 +525,16 @@ function PersistentHomeVideoPlayer() {
       return;
     }
     requestInProgressRef.current = true;
-    supabase
-      .rpc("record_video_view", { p_video_id: video.id })
+    void Promise.resolve(mediaClient
+      .rpc("record_video_view", { p_video_id: video.id }))
       .then(({ error }) => {
         if (!error) {
           viewRegisteredRef.current = true;
           void queryClient.invalidateQueries({ queryKey: ["videos"] });
         }
+      })
+      .catch((error: unknown) => {
+        console.error("Erreur enregistrement vue :", error);
       })
       .finally(() => {
         requestInProgressRef.current = false;
@@ -533,7 +545,7 @@ function PersistentHomeVideoPlayer() {
     const playerVideo = event.currentTarget;
     const currentTime = playerVideo.currentTime;
     if (typeof window !== "undefined") {
-      (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime = currentTime;
+      (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoCurrentTime"] = currentTime;
     }
     const previousTime = lastTimeRef.current;
     if (previousTime !== null && !playerVideo.paused && !playerVideo.seeking) {

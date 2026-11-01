@@ -31,6 +31,8 @@ export const Route = createFileRoute("/annonces")({
         content:
           "Annonces et communications officielles de Living Fellowship.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AnnoncesComponent,
