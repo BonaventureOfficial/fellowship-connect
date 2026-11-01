@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { mediaClient } from "@/lib/media-client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Member } from "@/lib/members";
 import { Button } from "@/components/ui/button";
@@ -279,7 +280,7 @@ function CommentsModal({
     enabled: open && !!video,
     queryFn: async (): Promise<VideoComment[]> => {
       if (!video) return [];
-      const { data, error } = await supabase
+      const { data, error } = await mediaClient
         .from("video_comments")
         .select(
           "id,video_id,user_id,author_name,author_serial,author_avatar,content,parent_id,created_at"
@@ -327,7 +328,7 @@ function CommentsModal({
         `${currentUserMember?.first_name ?? ""} ${currentUserMember?.last_name ?? ""}`.trim() ||
         "Membre";
 
-      const { error } = await supabase.from("video_comments").insert({
+      const { error } = await mediaClient.from("video_comments").insert({
         video_id: video.id,
         user_id: user.id,
         author_name: authorName,
@@ -688,7 +689,7 @@ function ReelCardItem({
         ) {
           viewRegisteredRef.current = true;
 
-          void Promise.resolve(supabase
+          void Promise.resolve(mediaClient
             .rpc("record_video_view", { p_video_id: reel.id }))
             .then(({ data: counted, error }) => {
               if (!error && counted) {
@@ -1033,7 +1034,7 @@ function PublishModal({ open, defaultType = "video", onClose }: PublishModalProp
 
       const authorName = `${member?.first_name ?? ""} ${member?.last_name ?? ""}`.trim() || "Membre";
 
-      const { error: insertError } = await supabase.from("videos").insert({
+      const { error: insertError } = await mediaClient.from("videos").insert({
         user_id: user.id,
         author_serial: member?.serial ?? null,
         author_name: authorName,
@@ -1402,7 +1403,7 @@ function ReelsModal({
   const { data: reels = [], isLoading } = useQuery({
     queryKey: ["videos", "reel"],
     queryFn: async (): Promise<VideoPost[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await mediaClient
         .from("videos")
         .select(
           "id,user_id,author_name,author_serial,author_avatar,type,title,description,video_url,duration_seconds,likes_count,comments_count,views_count,shares_count,created_at"
@@ -1442,7 +1443,7 @@ const displayedReels = sharedReelId
     queryKey: ["my-video-likes", user?.id],
     enabled: !!user && open,
     queryFn: async (): Promise<Set<string>> => {
-      const { data, error } = await supabase
+      const { data, error } = await mediaClient
         .from("video_likes")
         .select("video_id")
         .eq("user_id", user!.id);
@@ -1469,7 +1470,7 @@ const displayedReels = sharedReelId
     }
 
     try {
-      const { error } = await supabase.from("video_likes").insert({
+      const { error } = await mediaClient.from("video_likes").insert({
         video_id: reel.id,
         user_id: user.id,
       });
@@ -1625,7 +1626,7 @@ export function Footer() {
     let cancelled = false;
 
     const checkSharedMedia = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await mediaClient
         .from("videos")
         .select("id, type")
         .eq("id", sharedVideoId)

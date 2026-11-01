@@ -23,6 +23,7 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Footer } from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
+import { mediaClient } from "@/lib/media-client";
 
 // -----------------------------------------------------------------------------
 // Persistent home-video player (Architecture PiP Pro Ultra-Fluide)
@@ -524,7 +525,7 @@ function PersistentHomeVideoPlayer() {
       return;
     }
     requestInProgressRef.current = true;
-    void Promise.resolve(supabase
+    void Promise.resolve(mediaClient
       .rpc("record_video_view", { p_video_id: video.id }))
       .then(({ error }) => {
         if (!error) {
