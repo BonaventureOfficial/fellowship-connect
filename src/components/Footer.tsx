@@ -635,6 +635,7 @@ function ReelCardItem({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
+        if (!entry) return;
         if (entry.intersectionRatio >= 0.6) {
           // Met en pause toutes les autres vidéos, y compris celles de l'Accueil.
           document
@@ -687,8 +688,8 @@ function ReelCardItem({
         ) {
           viewRegisteredRef.current = true;
 
-          supabase
-            .rpc("record_video_view", { p_video_id: reel.id })
+          void Promise.resolve(supabase
+            .rpc("record_video_view", { p_video_id: reel.id }))
             .then(({ data: counted, error }) => {
               if (!error && counted) {
                 setLocalViewsCount((previousCount) => previousCount + 1);

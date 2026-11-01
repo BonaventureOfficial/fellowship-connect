@@ -700,9 +700,10 @@ function VideoCard({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
+        if (!entry) return;
         const isFloatingActiveForThis =
           typeof window !== "undefined" &&
-          (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoId === video.id;
+          (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoId"] === video.id;
 
         if (!entry.isIntersecting) {
           // La carte sort de l'écran : si la vidéo jouait, le mini-lecteur prend le relais
@@ -727,7 +728,7 @@ function VideoCard({
         } else {
           // La carte revient à l'écran : reprise fluide et fermeture du flottant
           if (isFloatingActiveForThis) {
-            const floatTime = (window as unknown as Record<string, unknown>).__lfActiveFloatingVideoCurrentTime;
+            const floatTime = (window as unknown as Record<string, unknown>)["__lfActiveFloatingVideoCurrentTime"];
             if (typeof floatTime === "number" && floatTime >= 0) {
               videoEl.currentTime = floatTime;
             }
@@ -787,10 +788,10 @@ function VideoCard({
           accumulatedWatchTimeRef.current >= 30
         ) {
           viewRegisteredRef.current = true;
-          supabase
+          void Promise.resolve(supabase
             .rpc("record_video_view", {
               p_video_id: video.id,
-            })
+            }))
             .then(({ data: counted, error }) => {
               if (error) {
                 console.error("Error recording video view:", error);
@@ -1576,9 +1577,9 @@ function HomeComponent() {
       (m) =>
         m.user_id === vid.user_id ||
         (Boolean(vid.author_serial) && m.serial === vid.author_serial)
-    )?.status
+    )?.status ?? null
   }
-  authorIsCeo={rolesMap.get(vid.user_id)?.includes("ceo")}
+  authorIsCeo={rolesMap.get(vid.user_id)?.includes("ceo") ?? false}
 />
 
                 ))}
