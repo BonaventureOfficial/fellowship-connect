@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 
 - Media queries reuse the generated authenticated client through `src/lib/media-client.ts` for their explicit schema contracts; this keeps media typing isolated when Cloud schema regeneration is unavailable, without creating another auth session.
+- External database migration uses an isolated destination and a verified cutover; currently connected database tools target the source and must never be treated as destination access.
