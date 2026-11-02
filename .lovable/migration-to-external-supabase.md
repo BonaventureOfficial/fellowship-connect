@@ -2,9 +2,18 @@
 
 ## État et périmètre
 
-La destination est le projet Supabase personnel montré dans la capture. Aucun accès administrateur à cette destination n’est confirmé. Les outils de base de données actuellement disponibles ciblent la source Lovable Cloud, pas la destination : ne pas les utiliser pour prétendre restaurer la copie.
+La destination confirmée par l’utilisateur est `https://zwngnydeplxqbvndfzke.supabase.co`. Aucun accès administrateur à cette destination n’est confirmé. Les outils de base de données actuellement disponibles ciblent la source Lovable Cloud, pas la destination : ne pas les utiliser pour prétendre restaurer la copie.
 
 L’application actuelle et sa configuration restent inchangées. Aucune suppression de Lovable Cloud n’est nécessaire pour préparer ou basculer le site Cloudflare vers une destination externe.
+
+### Inventaire du code terminé
+
+- Contrats applicatifs : membres, rôles, demandes et votes de vérification, annonces, likes et commentaires d’annonces, journal, abonnements entre membres, vidéos, commentaires, likes et vues de vidéos.
+- Inclure les fonctions CEO et suppression de compte, vérification, attribution du Serial et compteurs de vidéos. L’historique de migrations seul est incomplet pour les médias : comparer avec le schéma source réel et l’export.
+- Les valeurs par défaut de Vite et Cloudflare pointent encore sur la source ; les modifier seulement dans le déploiement isolé puis au moment de la bascule.
+- Google utilise actuellement le service de connexion Lovable ; prévoir sa configuration indépendante sur la destination.
+- Aucun abonnement temps réel ni tâche programmée active identifié dans le code audité ; la configuration hébergée reste à vérifier.
+- Les aides de connexion en aperçu, configuration de compilation et signalement des erreurs contiennent des intégrations Lovable ; vérifier leur rôle réel sur le site Cloudflare avant de déclarer l’indépendance complète.
 
 ## 1. Export officiel
 
