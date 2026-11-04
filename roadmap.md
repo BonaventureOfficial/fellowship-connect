@@ -12,4 +12,5 @@
 
 ## Nouveaux uploads médias
 
-- [ ] Remplacer le stockage actuel pour les nouveaux uploads de vidéos, avatars et portraits par https://media.livingfellowship2026.com. Service public joignable : il annonce R2 connecté, authentification obligatoire et limite 100 Mo. Blocage : contrat d’envoi et vérification réelle des accès privés inconnus ; obtenir le code du service Cloudflare sans secrets avant modification.
+- [x] Router les nouveaux uploads de vidéos, réels et avatars vers le service média avec la session et conserver les anciens liens. Envoi réel d’une image neutre réussi.
+- [ ] Router les portraits de vérification vers le service média. Blocage : le média test est lisible sans connexion (HTTP 206) ; conserver les portraits privés actuels jusqu’à un accès limité au propriétaire et aux admins.

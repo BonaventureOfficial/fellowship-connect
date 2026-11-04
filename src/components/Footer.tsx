@@ -3,6 +3,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { mediaClient } from "@/lib/media-client";
+import { uploadMedia, validateMediaFile } from "@/lib/media-upload";
 import { useAuth } from "@/hooks/useAuth";
 import type { Member } from "@/lib/members";
 import { Button } from "@/components/ui/button";
@@ -899,6 +900,13 @@ function PublishModal({ open, defaultType = "video", onClose }: PublishModalProp
       return;
     }
 
+    try {
+      validateMediaFile(selectedFile, "video");
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : "Fichier invalide.");
+      return;
+    }
+
     const previewUrl = URL.createObjectURL(selectedFile);
     setVideoPreviewUrl(previewUrl);
     setFile(selectedFile);
@@ -976,61 +984,12 @@ function PublishModal({ open, defaultType = "video", onClose }: PublishModalProp
     setProgressText("Préparation de l'envoi...");
 
     try {
-      const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4";
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
-      const filePath = `${user.id}/${fileName}`;
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const accessToken = session?.access_token;
-      const supabaseUrl = (supabase as any).supabaseUrl || "https://uivlmlbcmgndeyubqpxv.supabase.co";
-
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", `${supabaseUrl}/storage/v1/object/videos/${filePath}`, true);
-
-        if (accessToken) {
-          xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
-        }
-        xhr.setRequestHeader("x-upsert", "true");
-        xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            const pct = Math.round((event.loaded / event.total) * 100);
-            setUploadProgress(pct);
-            const loadedMb = (event.loaded / (1024 * 1024)).toFixed(1);
-            const totalMb = (event.total / (1024 * 1024)).toFixed(1);
-            setProgressText(`Téléversement rapide : ${loadedMb} Mo / ${totalMb} Mo (${pct}%)`);
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            setProgressText("Téléversement terminé avec succès !");
-            setUploadProgress(100);
-            resolve();
-          } else {
-            try {
-              const resJson = JSON.parse(xhr.responseText);
-              reject(new Error(resJson.message || `Erreur serveur (${xhr.status})`));
-            } catch {
-              reject(new Error(`Échec du téléversement HTTP ${xhr.status}`));
-            }
-          }
-        };
-
-        xhr.onerror = () => {
-          reject(new Error("Erreur réseau pendant le téléversement de la vidéo."));
-        };
-
-        xhr.send(file);
+      const publicUrl = await uploadMedia(file, "video", (pct, loaded, total) => {
+        setUploadProgress(pct);
+        setProgressText(`Téléversement : ${(loaded / (1024 * 1024)).toFixed(1)} Mo / ${(total / (1024 * 1024)).toFixed(1)} Mo (${pct}%)`);
       });
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("videos").getPublicUrl(filePath);
+      setUploadProgress(100);
+      setProgressText("Téléversement terminé avec succès !");
 
       const authorName = `${member?.first_name ?? ""} ${member?.last_name ?? ""}`.trim() || "Membre";
 
