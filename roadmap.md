@@ -1,7 +1,7 @@
 # Migration progressive vers le Supabase personnel
 
 - [x] Inventorier les fonctions existantes et les dépendances au service actuel.
-- [ ] Obtenir l’export officiel de la source, comptes compris. Export prêt sur Drive ; blocage : autorisation privée à réessayer.
+- [ ] Obtenir l’export officiel de la source, comptes compris. Export prêt sur Drive ; blocage : nouvelle autorisation Google refusée, fichier inaccessible.
 - [ ] Établir un accès sécurisé au projet de destination. Adresse publique confirmée ; blocage : aucun accès administrateur confirmé.
 - [ ] Restaurer et comparer les données, identifiants, séquences, règles d’accès et fonctions.
 - [ ] Transférer les fichiers des trois espaces de stockage, séparément de l’export de la base.
@@ -12,4 +12,4 @@
 
 ## Nouveaux uploads médias
 
-- [ ] Envoyer les nouvelles vidéos et images vers https://media.livingfellowship2026.com après vérification du service d’envoi et de ses protections.
+- [ ] Remplacer le stockage actuel pour les nouveaux uploads de vidéos, avatars et portraits par https://media.livingfellowship2026.com. Blocage : adresse d’envoi, méthode d’autorisation et accès privé aux portraits non fournis ; le domaine seul ne définit pas un service d’upload.
