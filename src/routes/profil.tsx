@@ -13,6 +13,7 @@ import { fullName, initialsOf, type Member } from "@/lib/members";
 import { useFollowCounts } from "@/lib/follows";
 import { lfLogo, lfMembers } from "@/lib/assets";
 import { useAvatarUrl } from "@/lib/useAvatarUrl";
+import { uploadMedia } from "@/lib/media-upload";
 import {
   Settings,
   ArrowLeft,
@@ -46,8 +47,6 @@ export const Route = createFileRoute("/profil")({
   }),
   component: ProfilComponent,
 });
-
-const SIGNED_URL_TTL = 60 * 60 * 24 * 365 * 5;
 
 function ProfilComponent() {
   const { user, loading } = useAuth();
@@ -133,19 +132,8 @@ function ProfilComponent() {
     setErr(null);
     setMsg(null);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${user.id}/avatar-${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("avatars")
-        .upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
-
-      const { data: signData, error: signErr } = await supabase.storage
-        .from("avatars")
-        .createSignedUrl(path, SIGNED_URL_TTL);
-      if (signErr) throw signErr;
-
-      await saveRow({ avatar_url: signData.signedUrl });
+      const avatarUrl = await uploadMedia(file, "image");
+      await saveRow({ avatar_url: avatarUrl });
       setMsg("Photo mise à jour avec succès.");
     } catch (e: unknown) {
       setErr(
