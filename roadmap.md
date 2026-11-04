@@ -12,4 +12,4 @@
 
 ## Nouveaux uploads médias
 
-- [ ] Remplacer le stockage actuel pour les nouveaux uploads de vidéos, avatars et portraits par https://media.livingfellowship2026.com. Blocage : adresse d’envoi, méthode d’autorisation et accès privé aux portraits non fournis ; le domaine seul ne définit pas un service d’upload.
+- [ ] Remplacer le stockage actuel pour les nouveaux uploads de vidéos, avatars et portraits par https://media.livingfellowship2026.com. Service public joignable : il annonce R2 connecté, authentification obligatoire et limite 100 Mo. Blocage : contrat d’envoi et vérification réelle des accès privés inconnus ; obtenir le code du service Cloudflare sans secrets avant modification.
