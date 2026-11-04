@@ -621,7 +621,7 @@ function ProfilComponent() {
         onOpenChange={setViewer}
         src={avatarSrc}
         name={displayName || "Photo"}
-        serial={member?.serial}
+        serial={member?.serial ?? null}
       />
     </main>
   );

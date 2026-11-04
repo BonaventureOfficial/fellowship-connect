@@ -200,6 +200,7 @@ function SettingItem({
   title: string;
   subtitle: string;
   open: boolean;
+  onToggle: () => void;
   danger?: boolean;
   children: React.ReactNode;
 }) {
@@ -583,7 +584,7 @@ function DeleteForm({ onDeleted }: { onDeleted: () => Promise<void> }) {
     setErr(null);
     try {
       if (!accepted) throw new Error("Veuillez cocher la confirmation.");
-      await deleteMyAccount();
+      await deleteMyAccount({ data: { confirm: accepted } });
       await onDeleted();
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : "Échec de la suppression.");
@@ -632,7 +633,7 @@ function AdminManager() {
   const addMut = useMutation({
     mutationFn: addAdmin,
     onSuccess: (res) => {
-      setMsg(res.message);
+      setMsg(`Admin ajouté : ${res.email}`);
       setEmail("");
       void admins.refetch();
       void qc.invalidateQueries({ queryKey: ["audit-log"] });
@@ -642,8 +643,8 @@ function AdminManager() {
 
   const removeMut = useMutation({
     mutationFn: removeAdmin,
-    onSuccess: (res) => {
-      setMsg(res.message);
+    onSuccess: () => {
+      setMsg("Admin retiré.");
       void admins.refetch();
       void qc.invalidateQueries({ queryKey: ["audit-log"] });
     },
@@ -662,7 +663,7 @@ function AdminManager() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <Button disabled={!email.includes("@") || addMut.isPending} onClick={() => { setErr(null); setMsg(null); addMut.mutate(email.trim()); }}>
+          <Button disabled={!email.includes("@") || addMut.isPending} onClick={() => { setErr(null); setMsg(null); addMut.mutate({ data: { email: email.trim() } }); }}>
             {addMut.isPending ? "Ajout…" : "Ajouter comme Admin"}
           </Button>
         </div>
@@ -674,13 +675,13 @@ function AdminManager() {
       </h3>
       <ul className="space-y-2">
         {(admins.data ?? []).map((a) => (
-          <li key={a.id} className="flex items-center justify-between rounded-xl border border-border p-3 text-sm">
+          <li key={`${a.user_id}-${a.role}`} className="flex items-center justify-between rounded-xl border border-border p-3 text-sm">
             <div>
-              <p className="font-semibold text-foreground">{a.full_name || a.email}</p>
+              <p className="font-semibold text-foreground">{a.email}</p>
               <p className="text-xs text-muted-foreground">{a.email}</p>
             </div>
-            {!a.is_ceo && (
-              <Button size="sm" variant="outline" disabled={removeMut.isPending} onClick={() => removeMut.mutate(a.user_id)}>
+            {a.role !== "ceo" && (
+              <Button size="sm" variant="outline" disabled={removeMut.isPending} onClick={() => removeMut.mutate({ data: { userId: a.user_id } })}>
                 Retirer Admin
               </Button>
             )}

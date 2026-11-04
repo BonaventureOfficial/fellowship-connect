@@ -5,12 +5,12 @@ export const MEDIA_ORIGIN = "https://media.livingfellowship2026.com";
 export function mediaUrlFromResponse(value: unknown): string {
   if (!value || typeof value !== "object") throw new Error("Réponse média invalide.");
   const response = value as Record<string, unknown>;
-  const nested = response.data;
+  const nested = response["data"];
   const data = nested && typeof nested === "object" ? nested as Record<string, unknown> : response;
-  if (typeof data.key === "string" && data.key.trim()) {
-    return `${MEDIA_ORIGIN}/media/${data.key.split("/").map(encodeURIComponent).join("/")}`;
+  if (typeof data["key"] === "string" && data["key"].trim()) {
+    return `${MEDIA_ORIGIN}/media/${data["key"].split("/").map(encodeURIComponent).join("/")}`;
   }
-  const url = data.url ?? data.media_url;
+  const url = data["url"] ?? data["media_url"];
   if (typeof url === "string") {
     const parsed = new URL(url, MEDIA_ORIGIN);
     if (parsed.origin === MEDIA_ORIGIN && parsed.pathname.startsWith("/media/")) return parsed.href;

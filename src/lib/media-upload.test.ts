@@ -39,7 +39,10 @@ describe("media upload contract", () => {
       expect(method).toBe("POST");
       expect(endpoint).toBe("https://media.livingfellowship2026.com/upload");
       expect(auth).toBe("Bearer test-session");
-      expect(sent?.get("file")).toBe(file);
+      const uploaded = sent?.get("file") as File;
+      expect(uploaded.name).toBe("video.mp4");
+      expect(uploaded.type).toBe("video/mp4");
+      expect(await uploaded.text()).toBe("video");
     } finally { globalThis.XMLHttpRequest = previous; }
   });
 });
