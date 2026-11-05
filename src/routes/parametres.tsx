@@ -11,7 +11,9 @@ import type { Member } from "@/lib/members";
 import { useMutation } from "@tanstack/react-query";
 import { useMyRoles } from "@/lib/roles";
 import { addAdmin, listAdmins, removeAdmin } from "@/lib/ceo.functions";
-import { BadgeCheck, KeyRound, Mail, ScrollText, ShieldCheck, Trash2, UserCog, Users, type LucideIcon } from "lucide-react";
+import { BadgeCheck, KeyRound, Mail, ScrollText, ShieldCheck, Trash2, UserCog, Users, X, type LucideIcon } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CUSTOM_CATEGORY, VERIFICATION_CATEGORIES, resolveVerificationCategory } from "@/lib/verification-categories";
 
 export const Route = createFileRoute("/parametres")({
   head: () => ({
@@ -35,21 +37,6 @@ export const Route = createFileRoute("/parametres")({
   component: ParametresComponent,
 });
 
-const CATEGORIES = [
-  "Chanteur, musicien, chorale",
-  "Formateur, éducateur, enseignant, professeur",
-  "Docteur, infirmier",
-  "Entreprise, organisation",
-  "Humoriste, acteur, comédien",
-  "Cinéma : réalisateur, vidéaste, cinéaste",
-  "Journaliste, média",
-  "Peintre, photographe, caméra",
-  "Mode, beauté, voyage",
-  "Développeur, innovateur",
-  "Coach, leader, politicien",
-  "Autre",
-];
-
 type Panel = "admins" | "review" | "log" | "my-fellowship" | "verify" | "email" | "password" | "delete" | null;
 
 function ParametresComponent() {
@@ -63,12 +50,13 @@ function ParametresComponent() {
     queryKey: ["my-member", user?.id],
     enabled: !!user,
     queryFn: async (): Promise<Member | null> => {
+      if (!user) return null;
       const { data, error } = await supabase
         .from("members")
         .select(
           "id,user_id,first_name,last_name,avatar_url,serial,status,created_at",
         )
-        .eq("user_id", user!.id)
+        .eq("user_id", user.id)
         .maybeSingle();
       if (error) throw error;
       return (data as Member | null) ?? null;
@@ -76,11 +64,8 @@ function ParametresComponent() {
   });
 
   return (
-    <main className="mx-auto max-w-2xl overflow-x-hidden px-4 pt-6 pb-24">
+    <main className="mx-auto min-w-0 max-w-2xl px-4 pt-6 pb-24 [overflow-wrap:anywhere] [&_input]:min-w-0 [&_button]:whitespace-normal [&_button]:break-words [&_label]:leading-relaxed">
       <h1 className="text-xl font-bold text-foreground">Paramètres</h1>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Gérez la vérification, la sécurité et la suppression de votre compte.
-      </p>
 
       {loading ? (
         <p className="mt-6 text-sm text-muted-foreground">Chargement…</p>
@@ -143,8 +128,8 @@ function ParametresComponent() {
         />
       )}
 
-      <section className="mt-8 mb-6 rounded-2xl border border-border bg-card p-5 text-center">
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-primary">Notre Devise</h2>
+      <section className="mt-8 mb-6 border-t border-border py-6 text-center">
+        <h2 className="text-sm font-semibold text-primary">Notre Devise</h2>
         <p className="mt-3 break-words text-base font-bold text-foreground">
           Personalite <span className="text-accent">•</span> Potentialite <span className="text-accent">•</span> Prosperite
         </p>
@@ -178,12 +163,15 @@ function SettingsGrid({
         {items.map(({ id, title, subtitle, icon: Icon, danger }) => {
           const selected = panel === id;
           return (
-            <button
+            <Button
+              variant="outline"
               key={id}
               type="button"
               onClick={() => setPanel(selected ? null : id)}
               aria-pressed={selected}
-              className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border p-2 text-center transition-colors ${
+              aria-label={title}
+              aria-controls={selected ? "settings-panel" : undefined}
+              className={`h-36 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border p-2 text-center shadow-none ${
                 selected
                   ? danger
                     ? "border-destructive bg-destructive/10"
@@ -194,29 +182,28 @@ function SettingsGrid({
               }`}
             >
               <span
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                  danger ? "bg-destructive/15 text-destructive" : "lf-ring-gradient text-primary-foreground"
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                  danger ? "bg-destructive/15 text-destructive" : "bg-primary/15 text-primary"
                 }`}
               >
                 <Icon className="h-5 w-5" />
               </span>
               <span
-                className={`line-clamp-2 w-full break-words text-[11px] font-semibold leading-tight ${
+                className={`flex min-h-12 w-full items-center justify-center break-words text-xs font-semibold leading-4 ${
                   danger ? "text-destructive" : "text-foreground"
                 }`}
               >
                 {title}
               </span>
-              <span className="line-clamp-2 w-full break-words text-[9.5px] leading-tight text-muted-foreground">
-                {subtitle}
-              </span>
-            </button>
+            </Button>
           );
         })}
       </div>
       {active && (
         <section
-          className={`mt-4 min-w-0 overflow-hidden break-words rounded-2xl border bg-card ${
+          id="settings-panel"
+          aria-label={active.title}
+          className={`mt-6 min-w-0 break-words border-t py-4 ${
             active.danger ? "border-destructive/40" : "border-border"
           }`}
         >
@@ -224,9 +211,9 @@ function SettingsGrid({
             <span className={`min-w-0 break-words text-sm font-semibold ${active.danger ? "text-destructive" : "text-foreground"}`}>
               {active.title}
             </span>
-            <button type="button" onClick={() => setPanel(null)} className="shrink-0 text-xs text-muted-foreground">
-              Fermer
-            </button>
+            <Button type="button" variant="ghost" size="icon" aria-label="Fermer" title="Fermer" onClick={() => setPanel(null)} className="shrink-0">
+              <X />
+            </Button>
           </div>
           <div className="min-w-0 p-4">{active.content}</div>
         </section>
@@ -260,7 +247,7 @@ function VerifyForm({
   const [birthDate, setBirthDate] = useState("");
   const [fonction, setFonction] = useState("");
   const [customCat, setCustomCat] = useState("");
-  const categoryValue = fonction === "Autre" ? customCat.trim() : fonction.trim();
+  const categoryValue = resolveVerificationCategory(fonction, customCat);
   const [serial, setSerial] = useState("");
   const [portrait, setPortrait] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -393,27 +380,29 @@ function VerifyForm({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="v-fn">Catégories</Label>
-        <select
-          id="v-fn"
-          value={fonction}
-          onChange={(e) => setFonction(e.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
-        >
-          <option value="">Choisir une catégorie…</option>
-          {CATEGORIES.map((f) => (
-            <option key={f} value={f}>
-              {f === "Autre" ? "Autre catégorie personnalisée" : f}
-            </option>
-          ))}
-        </select>
-        {fonction === "Autre" && (
+        <Select value={fonction} onValueChange={setFonction}>
+          <SelectTrigger id="v-fn" className="h-auto min-h-10 whitespace-normal text-left [&>span]:line-clamp-none [&>span]:min-w-0 [&>span]:break-words">
+            <SelectValue placeholder="Choisir une catégorie…" />
+          </SelectTrigger>
+          <SelectContent className="w-[var(--radix-select-trigger-width)] max-w-[calc(100vw-2rem)]">
+            {VERIFICATION_CATEGORIES.map((category) => (
+              <SelectItem key={category} value={category} className="whitespace-normal break-words">
+                {category}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {fonction === CUSTOM_CATEGORY && (
+          <div className="space-y-1.5 pt-2">
+          <Label htmlFor="v-custom-category">Votre catégorie personnalisée</Label>
           <Input
-            className="mt-2"
+            id="v-custom-category"
             value={customCat}
             maxLength={60}
             placeholder="Précisez votre catégorie"
             onChange={(e) => setCustomCat(e.target.value)}
           />
+          </div>
         )}
       </div>
       <div className="space-y-1.5">
@@ -663,7 +652,7 @@ function AdminManager() {
     <div className="grid gap-4">
       <div className="space-y-1.5">
         <Label htmlFor="adm-email">Email de l'utilisateur à nommer Admin</Label>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             id="adm-email"
             type="email"
@@ -683,8 +672,8 @@ function AdminManager() {
       </h3>
       <ul className="space-y-2">
         {(admins.data ?? []).map((a) => (
-          <li key={`${a.user_id}-${a.role}`} className="flex items-center justify-between rounded-xl border border-border p-3 text-sm">
-            <div>
+          <li key={`${a.user_id}-${a.role}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+            <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               <p className="font-semibold text-foreground">{a.email}</p>
               <p className="text-xs text-muted-foreground">{a.email}</p>
             </div>
@@ -914,7 +903,7 @@ function MyFellowshipSection({
     return (
       <div className="space-y-4">
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary">
               ✓ Compte Vérifié — Éligible
             </span>
@@ -934,7 +923,7 @@ function MyFellowshipSection({
 
         <Button
           type="button"
-          className="w-full"
+          className="h-auto min-h-9 w-full py-2"
           disabled={!serial}
           onClick={() => setConfirmed(true)}
         >
@@ -949,7 +938,7 @@ function MyFellowshipSection({
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
             ✓ Parrain officiel Living Fellowship
           </span>
@@ -1198,7 +1187,7 @@ function VerificationSection({
   if (req && req.state === "En attente") {
     return (
       <div className="rounded-xl border border-border bg-muted/40 p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm font-semibold text-foreground">
             Demande en attente de validation
           </p>
