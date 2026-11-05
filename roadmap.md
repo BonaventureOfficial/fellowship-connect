@@ -12,5 +12,11 @@
 
 ## Nouveaux uploads médias
 
+## Polissage des Paramètres
+
+- [ ] Organiser les fonctions en trois miniatures par ligne et corriger les débordements.
+- [ ] Remplacer les fonctions par les catégories demandées, avec saisie personnalisée.
+- [ ] Afficher Notre Devise sous les paramètres et vérifier l’affichage mobile.
+
 - [x] Router les nouveaux uploads de vidéos, réels et avatars vers le service média avec la session et conserver les anciens liens. Envoi réel d’une image neutre réussi.
 - [ ] Router les portraits de vérification vers le service média. Blocage : le média test est lisible sans connexion (HTTP 206) ; conserver les portraits privés actuels jusqu’à un accès limité au propriétaire et aux admins.
