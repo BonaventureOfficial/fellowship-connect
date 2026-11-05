@@ -11,6 +11,7 @@ import type { Member } from "@/lib/members";
 import { useMutation } from "@tanstack/react-query";
 import { useMyRoles } from "@/lib/roles";
 import { addAdmin, listAdmins, removeAdmin } from "@/lib/ceo.functions";
+import { BadgeCheck, KeyRound, Mail, ScrollText, ShieldCheck, Trash2, UserCog, Users, type LucideIcon } from "lucide-react";
 
 export const Route = createFileRoute("/parametres")({
   head: () => ({
@@ -34,14 +35,19 @@ export const Route = createFileRoute("/parametres")({
   component: ParametresComponent,
 });
 
-const FONCTIONS = [
-  "Représentant(e)",
-  "Vice Représentant(e)",
-  "Secrétaire",
-  "Trésorier(ère)",
-  "Staff d'arbitrage",
-  "Membre Fondateur",
-  "Membre",
+const CATEGORIES = [
+  "Chanteur, musicien, chorale",
+  "Formateur, éducateur, enseignant, professeur",
+  "Docteur, infirmier",
+  "Entreprise, organisation",
+  "Humoriste, acteur, comédien",
+  "Cinéma : réalisateur, vidéaste, cinéaste",
+  "Journaliste, média",
+  "Peintre, photographe, caméra",
+  "Mode, beauté, voyage",
+  "Développeur, innovateur",
+  "Coach, leader, politicien",
+  "Autre",
 ];
 
 type Panel = "admins" | "review" | "log" | "my-fellowship" | "verify" | "email" | "password" | "delete" | null;
@@ -70,7 +76,7 @@ function ParametresComponent() {
   });
 
   return (
-    <main className="mx-auto max-w-2xl px-4 pt-6">
+    <main className="mx-auto max-w-2xl overflow-x-hidden px-4 pt-6 pb-24">
       <h1 className="text-xl font-bold text-foreground">Paramètres</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Gérez la vérification, la sécurité et la suppression de votre compte.
@@ -88,153 +94,144 @@ function ParametresComponent() {
           </Button>
         </section>
       ) : (
-        <div className="mt-5 space-y-3">
-          {isCeo && (
-            <SettingItem
-              title="Add Admin"
-              subtitle="Nommer ou révoquer des administrateurs"
-              open={panel === "admins"}
-              onToggle={() => setPanel(panel === "admins" ? null : "admins")}
-            >
-              <AdminManager />
-            </SettingItem>
-          )}
-          {isAdmin && (
-            <SettingItem
-              title="Valider les comptes"
-              subtitle="4 validations d'admins requises par compte"
-              open={panel === "review"}
-              onToggle={() => setPanel(panel === "review" ? null : "review")}
-            >
-              <ReviewRequests myId={user.id} />
-            </SettingItem>
-          )}
-          {isAdmin && (
-            <SettingItem
-              title="Journal de sécurité"
-              subtitle="Qui a validé, refusé, publié ou changé les rôles"
-              open={panel === "log"}
-              onToggle={() => setPanel(panel === "log" ? null : "log")}
-            >
-              <AuditLog />
-            </SettingItem>
-          )}
-          <SettingItem
-            title="My Fellowship"
-            subtitle={
-              member?.status === "Vérifié"
-                ? "Parrainez des membres avec votre Serial Number"
-                : "Vérification requise pour parrainer"
-            }
-            open={panel === "my-fellowship"}
-            onToggle={() =>
-              setPanel(panel === "my-fellowship" ? null : "my-fellowship")
-            }
-          >
-            <MyFellowshipSection
-              member={member ?? null}
-              onGoToVerify={() => setPanel("verify")}
-            />
-          </SettingItem>
-
-          <SettingItem
-            title="Vérifier Votre Compte"
-            subtitle={
-              member?.status === "Vérifié"
-                ? "Compte déjà vérifié"
-                : "Demande de vérification de compte"
-            }
-            open={panel === "verify"}
-            onToggle={() => setPanel(panel === "verify" ? null : "verify")}
-          >
-            <VerificationSection userId={user.id} member={member ?? null} />
-          </SettingItem>
-
-          <SettingItem
-            title="Changer d'email"
-            subtitle="Confirmez d'abord votre ancien email"
-            open={panel === "email"}
-            onToggle={() => setPanel(panel === "email" ? null : "email")}
-          >
-            <EmailForm currentEmail={user.email ?? ""} />
-          </SettingItem>
-
-          <SettingItem
-            title="Changer de mot de passe"
-            subtitle="Confirmez d'abord votre ancien mot de passe"
-            open={panel === "password"}
-            onToggle={() => setPanel(panel === "password" ? null : "password")}
-          >
-            <PasswordForm email={user.email ?? ""} />
-          </SettingItem>
-
-          <SettingItem
-            title="Supprimer mon compte"
-            subtitle="Action définitive et irréversible"
-            danger
-            open={panel === "delete"}
-            onToggle={() => setPanel(panel === "delete" ? null : "delete")}
-          >
-            <DeleteForm
-              onDeleted={async () => {
-                await supabase.auth.signOut();
-                queryClient.clear();
-                void navigate({ to: "/", replace: true });
-              }}
-            />
-          </SettingItem>
-        </div>
+        <SettingsGrid
+          panel={panel}
+          setPanel={setPanel}
+          items={[
+            ...(isCeo
+              ? [{ id: "admins" as const, title: "Add Admin", subtitle: "Nommer ou révoquer des admins", icon: UserCog, content: <AdminManager /> }]
+              : []),
+            ...(isAdmin
+              ? [
+                  { id: "review" as const, title: "Valider les comptes", subtitle: "4 validations requises", icon: BadgeCheck, content: <ReviewRequests myId={user.id} /> },
+                  { id: "log" as const, title: "Journal de sécurité", subtitle: "Historique des actions", icon: ScrollText, content: <AuditLog /> },
+                ]
+              : []),
+            {
+              id: "my-fellowship" as const,
+              title: "My Fellowship",
+              subtitle: member?.status === "Vérifié" ? "Parrainez des membres" : "Vérification requise",
+              icon: Users,
+              content: <MyFellowshipSection member={member ?? null} onGoToVerify={() => setPanel("verify")} />,
+            },
+            {
+              id: "verify" as const,
+              title: "Vérifier Votre Compte",
+              subtitle: member?.status === "Vérifié" ? "Compte déjà vérifié" : "Demande de vérification",
+              icon: ShieldCheck,
+              content: <VerificationSection userId={user.id} member={member ?? null} />,
+            },
+            { id: "email" as const, title: "Changer d'email", subtitle: "Ancien email requis", icon: Mail, content: <EmailForm currentEmail={user.email ?? ""} /> },
+            { id: "password" as const, title: "Mot de passe", subtitle: "Ancien mot de passe requis", icon: KeyRound, content: <PasswordForm email={user.email ?? ""} /> },
+            {
+              id: "delete" as const,
+              title: "Supprimer mon compte",
+              subtitle: "Action irréversible",
+              icon: Trash2,
+              danger: true,
+              content: (
+                <DeleteForm
+                  onDeleted={async () => {
+                    await supabase.auth.signOut();
+                    queryClient.clear();
+                    void navigate({ to: "/", replace: true });
+                  }}
+                />
+              ),
+            },
+          ]}
+        />
       )}
+
+      <section className="mt-8 mb-6 rounded-2xl border border-border bg-card p-5 text-center">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-primary">Notre Devise</h2>
+        <p className="mt-3 break-words text-base font-bold text-foreground">
+          Personalite <span className="text-accent">•</span> Potentialite <span className="text-accent">•</span> Prosperite
+        </p>
+      </section>
     </main>
   );
 }
 
-function SettingItem({
-  title,
-  subtitle,
-  open,
-  onToggle,
-  danger,
-  children,
-}: {
+type SettingTile = {
+  id: Exclude<Panel, null>;
   title: string;
   subtitle: string;
-  open: boolean;
-  onToggle: () => void;
+  icon: LucideIcon;
   danger?: boolean;
-  children: React.ReactNode;
+  content: React.ReactNode;
+};
+
+function SettingsGrid({
+  items,
+  panel,
+  setPanel,
+}: {
+  items: SettingTile[];
+  panel: Panel;
+  setPanel: (p: Panel) => void;
 }) {
+  const active = items.find((i) => i.id === panel);
   return (
-    <section
-      className={`overflow-hidden rounded-2xl border bg-card ${
-        danger ? "border-destructive/40" : "border-border"
-      }`}
-    >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between gap-3 p-4 text-left"
-      >
-        <span>
-          <span
-            className={`block text-sm font-semibold ${
-              danger ? "text-destructive" : "text-foreground"
-            }`}
-          >
-            {title}
-          </span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">
-            {subtitle}
-          </span>
-        </span>
-        <span
-          className={`text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`}
+    <div className="mt-5">
+      <div className="grid grid-cols-3 gap-2.5">
+        {items.map(({ id, title, subtitle, icon: Icon, danger }) => {
+          const selected = panel === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setPanel(selected ? null : id)}
+              aria-pressed={selected}
+              className={`flex aspect-square min-w-0 flex-col items-center justify-center gap-1.5 rounded-2xl border p-2 text-center transition-colors ${
+                selected
+                  ? danger
+                    ? "border-destructive bg-destructive/10"
+                    : "border-primary bg-primary/10"
+                  : danger
+                    ? "border-destructive/40 bg-card"
+                    : "border-border bg-card hover:border-primary/50"
+              }`}
+            >
+              <span
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                  danger ? "bg-destructive/15 text-destructive" : "lf-ring-gradient text-primary-foreground"
+                }`}
+              >
+                <Icon className="h-5 w-5" />
+              </span>
+              <span
+                className={`line-clamp-2 w-full break-words text-[11px] font-semibold leading-tight ${
+                  danger ? "text-destructive" : "text-foreground"
+                }`}
+              >
+                {title}
+              </span>
+              <span className="line-clamp-2 w-full break-words text-[9.5px] leading-tight text-muted-foreground">
+                {subtitle}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {active && (
+        <section
+          className={`mt-4 min-w-0 overflow-hidden break-words rounded-2xl border bg-card ${
+            active.danger ? "border-destructive/40" : "border-border"
+          }`}
         >
-          ›
-        </span>
-      </button>
-      {open && <div className="border-t border-border p-4">{children}</div>}
-    </section>
+          <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+            <span className={`min-w-0 break-words text-sm font-semibold ${active.danger ? "text-destructive" : "text-foreground"}`}>
+              {active.title}
+            </span>
+            <button type="button" onClick={() => setPanel(null)} className="shrink-0 text-xs text-muted-foreground">
+              Fermer
+            </button>
+          </div>
+          <div className="min-w-0 p-4">{active.content}</div>
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -262,6 +259,8 @@ function VerifyForm({
   const [birthPlace, setBirthPlace] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [fonction, setFonction] = useState("");
+  const [customCat, setCustomCat] = useState("");
+  const categoryValue = fonction === "Autre" ? customCat.trim() : fonction.trim();
   const [serial, setSerial] = useState("");
   const [portrait, setPortrait] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -301,7 +300,7 @@ function VerifyForm({
         !lastName.trim() ||
         !birthPlace.trim() ||
         !birthDate.trim() ||
-        !fonction.trim() ||
+        !categoryValue ||
         !serial.trim()
       ) {
         throw new Error("Veuillez remplir tous les champs du formulaire.");
@@ -325,7 +324,7 @@ function VerifyForm({
         last_name: lastName.trim(),
         birth_place: birthPlace.trim(),
         birth_date: isoDate,
-        lf_function: fonction.trim(),
+        lf_function: categoryValue,
         serial: serial.trim(),
         portrait_path: path,
       } as never);
@@ -393,20 +392,29 @@ function VerifyForm({
         </div>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="v-fn">Fonction dans LF</Label>
+        <Label htmlFor="v-fn">Catégories</Label>
         <select
           id="v-fn"
           value={fonction}
           onChange={(e) => setFonction(e.target.value)}
           className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
         >
-          <option value="">Choisir une fonction…</option>
-          {FONCTIONS.map((f) => (
+          <option value="">Choisir une catégorie…</option>
+          {CATEGORIES.map((f) => (
             <option key={f} value={f}>
-              {f}
+              {f === "Autre" ? "Autre catégorie personnalisée" : f}
             </option>
           ))}
         </select>
+        {fonction === "Autre" && (
+          <Input
+            className="mt-2"
+            value={customCat}
+            maxLength={60}
+            placeholder="Précisez votre catégorie"
+            onChange={(e) => setCustomCat(e.target.value)}
+          />
+        )}
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="v-serial">Serial Number</Label>
