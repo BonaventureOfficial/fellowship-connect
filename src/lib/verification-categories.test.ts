@@ -1,4 +1,3 @@
-/// <reference types="bun" />
 import { describe, expect, it } from "bun:test";
 import { CUSTOM_CATEGORY, VERIFICATION_CATEGORIES, resolveVerificationCategory } from "./verification-categories";
 
