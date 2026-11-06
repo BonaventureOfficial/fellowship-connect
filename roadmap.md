@@ -14,12 +14,12 @@
 
 ## Polissage des Paramètres
 
-- [ ] Corriger et vérifier l’ouverture des miniatures avec une session réelle.
-- [ ] Vérifier la chaîne Lovable → GitHub → Cloudflare sans modifier le déploiement existant.
+- [x] Corriger et vérifier l’ouverture des huit miniatures avec le compte CEO à 320, 384 et 1280 px : panneau visible, focus déplacé, fermeture et absence de débordement.
+- [ ] Vérifier la chaîne Lovable → GitHub → Cloudflare sans modifier le déploiement existant. Dernière publication Fellowship Connect confirmée : 2 novembre 2026 à 02:43 UTC. Blocages : statut Git Lovable non accessible à l’agent ; historique et déclencheurs Workers Builds refusés (HTTP 401), malgré les lectures Workers réussies. Vérifier le statut Git dans Lovable et la connexion dépôt/branche dans Cloudflare Builds avec l’utilisateur.
 
-- [ ] Organiser les fonctions en trois miniatures par ligne et corriger les débordements.
-- [ ] Remplacer les fonctions par les catégories demandées, avec saisie personnalisée.
-- [ ] Afficher Notre Devise sous les paramètres et vérifier l’affichage mobile.
+- [x] Organiser les fonctions en trois miniatures par ligne et corriger les débordements.
+- [x] Remplacer les fonctions par les catégories demandées, avec saisie personnalisée. Tests des catégories exécutés avec succès.
+- [x] Afficher Notre Devise sous les paramètres et vérifier l’affichage mobile.
 
 - [x] Router les nouveaux uploads de vidéos, réels et avatars vers le service média avec la session et conserver les anciens liens. Envoi réel d’une image neutre réussi.
 - [ ] Router les portraits de vérification vers le service média. Blocage : le média test est lisible sans connexion (HTTP 206) ; conserver les portraits privés actuels jusqu’à un accès limité au propriétaire et aux admins.

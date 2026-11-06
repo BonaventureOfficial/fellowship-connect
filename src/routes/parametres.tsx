@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -157,6 +157,22 @@ function SettingsGrid({
   setPanel: (p: Panel) => void;
 }) {
   const active = items.find((i) => i.id === panel);
+  const panelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!panel) return;
+    const frame = requestAnimationFrame(() => {
+      const section = panelRef.current;
+      if (!section) return;
+      section.focus({ preventScroll: true });
+      section.scrollIntoView({
+        block: "start",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [panel]);
+
   return (
     <div className="mt-5">
       <div className="grid grid-cols-3 gap-2.5">
@@ -169,6 +185,7 @@ function SettingsGrid({
               type="button"
               onClick={() => setPanel(selected ? null : id)}
               aria-pressed={selected}
+              aria-expanded={selected}
               aria-label={title}
               aria-controls={selected ? "settings-panel" : undefined}
               className={`h-36 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border p-2 text-center shadow-none ${
@@ -201,9 +218,11 @@ function SettingsGrid({
       </div>
       {active && (
         <section
+          ref={panelRef}
           id="settings-panel"
+          tabIndex={-1}
           aria-label={active.title}
-          className={`mt-6 min-w-0 break-words border-t py-4 ${
+          className={`mt-6 min-w-0 scroll-mt-6 break-words border-t py-4 focus:outline-none ${
             active.danger ? "border-destructive/40" : "border-border"
           }`}
         >
