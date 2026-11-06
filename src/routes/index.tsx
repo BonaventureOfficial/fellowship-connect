@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Splash } from "@/components/Splash";
-import { Billboard } from "@/components/Billboard";
 import { MemberCard } from "@/components/MemberCard";
 import { supabase } from "@/integrations/supabase/client";
 import { mediaClient } from "@/lib/media-client";
@@ -10,7 +9,6 @@ import { useAuth } from "@/hooks/useAuth";
 import type { Member } from "@/lib/members";
 import { useRolesMap } from "@/lib/roles";
 import { lfLogo } from "@/lib/assets";
-import { useUnreadAnnouncements } from "@/lib/announcements";
 import { VerificationBadge } from "@/components/PlatinumBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1099,7 +1097,6 @@ function HomeComponent() {
   };
 
   const { rolesMap } = useRolesMap();
-  const unreadAnnouncements = useUnreadAnnouncements();
 
   const { data: myMember = null } = useQuery({
     queryKey: ["my-member-status", user?.id],
@@ -1343,27 +1340,6 @@ function HomeComponent() {
           </button>
 
           <div className="flex items-center gap-2">
-            <Link
-              to="/annonces"
-              className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card/80 text-muted-foreground transition-colors hover:text-foreground hover:border-primary/50"
-              title="Notifications et annonces officielles"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4 fill-none"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
-                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-              </svg>
-              {unreadAnnouncements > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[0.6rem] font-bold text-primary-foreground animate-pulse">
-                  {unreadAnnouncements > 9 ? "9+" : unreadAnnouncements}
-                </span>
-              )}
-            </Link>
-
             <button
               type="button"
               onClick={toggleTheme}
@@ -1450,8 +1426,6 @@ function HomeComponent() {
                 </button>
               </div>
             </div>
-
-            <Billboard />
 
             <div className="mt-6">
               <div className="mb-3 flex items-center justify-between">

@@ -128,12 +128,6 @@ function ParametresComponent() {
         />
       )}
 
-      <section className="mt-8 mb-6 border-t border-border py-6 text-center">
-        <h2 className="text-sm font-semibold text-primary">Notre Devise</h2>
-        <p className="mt-3 break-words text-base font-bold text-foreground">
-          Personalite <span className="text-accent">•</span> Potentialite <span className="text-accent">•</span> Prosperite
-        </p>
-      </section>
     </main>
   );
 }
@@ -611,7 +605,7 @@ function DeleteForm({ onDeleted }: { onDeleted: () => Promise<void> }) {
   return (
     <div className="grid gap-3">
       <p className="text-xs text-muted-foreground">
-        La suppression de votre compte effacera votre profil, vos annonces et toutes
+        La suppression de votre compte effacera votre profil et toutes
         les données associées. Cette action est irréversible.
       </p>
       <label className="flex items-start gap-2 text-xs text-foreground">
@@ -1269,9 +1263,6 @@ const ACTION_LABELS: Record<string, string> = {
   verification_refuse: "a refusé la demande de",
   account_verified: "a donné la 4e validation — compte vérifié :",
   account_refused: "a donné le 4e refus — demande refusée :",
-  announcement_publish: "a publié une annonce",
-  announcement_edit: "a modifié une annonce",
-  announcement_delete: "a supprimé une annonce",
   role_grant_admin: "a nommé Admin",
   role_revoke_admin: "a révoqué l'Admin",
 };

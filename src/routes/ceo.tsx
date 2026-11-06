@@ -16,13 +16,13 @@ export const Route = createFileRoute("/ceo")({
       {
         name: "description",
         content:
-          "Espace réservé au CEO de Living Fellowship : gestion des admins, publication des annonces et gestion des membres.",
+          "Espace réservé au CEO de Living Fellowship : gestion des admins et des membres.",
       },
       { property: "og:title", content: "Living Fellowship — Espace CEO" },
       {
         property: "og:description",
         content:
-          "Console privée du CEO Living Fellowship : admins, annonces et membres.",
+          "Console privée du CEO Living Fellowship : admins et membres.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -173,20 +173,9 @@ function CeoComponent() {
         </div>
       </section>
 
-      {/* 2 & 3 */}
       <section className="mt-4 rounded-2xl border border-dashed border-border bg-card/50 p-5">
         <h2 className="text-sm font-semibold text-foreground">
-          2. Publier une annonce
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">Bientôt disponible</p>
-        <Button variant="outline" className="mt-3 w-full" disabled>
-          Bientôt disponible
-        </Button>
-      </section>
-
-      <section className="mt-4 rounded-2xl border border-dashed border-border bg-card/50 p-5">
-        <h2 className="text-sm font-semibold text-foreground">
-          3. Gérer tous les membres
+          2. Gérer tous les membres
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">Bientôt disponible</p>
         <Button variant="outline" className="mt-3 w-full" disabled>
