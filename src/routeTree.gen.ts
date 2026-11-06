@@ -10,7 +10,6 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AnnoncesRouteImport } from './routes/annonces'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CeoRouteImport } from './routes/ceo'
 import { Route as ParametresRouteImport } from './routes/parametres'
@@ -20,11 +19,6 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnnoncesRoute = AnnoncesRouteImport.update({
-  id: '/annonces',
-  path: '/annonces',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -55,7 +49,6 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
   '/ceo': typeof CeoRoute
   '/parametres': typeof ParametresRoute
@@ -64,7 +57,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
   '/ceo': typeof CeoRoute
   '/parametres': typeof ParametresRoute
@@ -74,7 +66,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/annonces': typeof AnnoncesRoute
   '/auth': typeof AuthRoute
   '/ceo': typeof CeoRoute
   '/parametres': typeof ParametresRoute
@@ -84,26 +75,12 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
-    | '/annonces'
-    | '/auth'
-    | '/ceo'
-    | '/parametres'
-    | '/profil'
-    | '/reset-password'
+    '/' | '/auth' | '/ceo' | '/parametres' | '/profil' | '/reset-password'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/annonces'
-    | '/auth'
-    | '/ceo'
-    | '/parametres'
-    | '/profil'
-    | '/reset-password'
+  to: '/' | '/auth' | '/ceo' | '/parametres' | '/profil' | '/reset-password'
   id:
     | '__root__'
     | '/'
-    | '/annonces'
     | '/auth'
     | '/ceo'
     | '/parametres'
@@ -113,7 +90,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AnnoncesRoute: typeof AnnoncesRoute
   AuthRoute: typeof AuthRoute
   CeoRoute: typeof CeoRoute
   ParametresRoute: typeof ParametresRoute
@@ -128,13 +104,6 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/annonces': {
-      id: '/annonces'
-      path: '/annonces'
-      fullPath: '/annonces'
-      preLoaderRoute: typeof AnnoncesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -177,7 +146,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AnnoncesRoute: AnnoncesRoute,
   AuthRoute: AuthRoute,
   CeoRoute: CeoRoute,
   ParametresRoute: ParametresRoute,
