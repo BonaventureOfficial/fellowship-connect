@@ -14,3 +14,4 @@
 - Settings tiles reveal a single inline panel and move focus and scroll to it, respecting reduced motion, so forms remain discoverable below the grid on phones.
 - External database migration uses an isolated destination and a verified cutover; currently connected database tools target the source and must never be treated as destination access.
 - New community media uploads use the shared browser upload adapter with the current authenticated session; persist the returned media URL and preserve legacy storage reads. Verification portraits must retain private owner/staff access before switching providers.
+- Retired frontend sections are removed with their route, query hooks and exclusive components; preserve stored data and audit history unless a separate database cleanup is requested, to avoid affecting migration backups.

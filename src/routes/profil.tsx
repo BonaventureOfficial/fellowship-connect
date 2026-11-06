@@ -11,7 +11,7 @@ import { AvatarViewer } from "@/components/AvatarViewer";
 import { VerificationBadge } from "@/components/PlatinumBadge";
 import { fullName, initialsOf, type Member } from "@/lib/members";
 import { useFollowCounts } from "@/lib/follows";
-import { lfLogo, lfMembers } from "@/lib/assets";
+import { lfLogo } from "@/lib/assets";
 import { useAvatarUrl } from "@/lib/useAvatarUrl";
 import { uploadMedia } from "@/lib/media-upload";
 import {
@@ -229,33 +229,14 @@ function ProfilComponent() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 pt-6">
-      {/* Bannière identité */}
-      <div className="relative overflow-hidden rounded-3xl border border-border">
+      <header className="flex items-center gap-3 border-b border-border pb-5">
         <img
-          src={lfMembers.url}
-          alt="L'équipe Living Fellowship"
-          className="h-36 w-full object-cover opacity-70 sm:h-44"
+          src={lfLogo.url}
+          alt="Living Fellowship"
+          className="h-14 w-14 shrink-0 select-none"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent" />
-        <div className="absolute -bottom-6 left-5 flex items-end gap-3">
-          <div className="lf-ring-gradient rounded-2xl p-[2px] shadow-lg">
-            <div className="rounded-[14px] bg-card p-1.5">
-              <img
-                src={lfLogo.url}
-                alt="Living Fellowship"
-                className="h-14 w-14 select-none"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-9">
-        <h1 className="text-xl font-bold text-foreground">Living Fellowship</h1>
-        <p className="lf-billboard-word mt-1 text-sm font-semibold uppercase tracking-[0.2em]">
-          Personalite · Potentialite · Prosperite
-        </p>
-      </div>
+        <h1 className="min-w-0 break-words text-xl font-bold text-foreground">Living Fellowship</h1>
+      </header>
 
       {/* Contenu principal */}
       <section className="mt-6 rounded-2xl border border-border bg-card p-5">
@@ -583,19 +564,6 @@ function ProfilComponent() {
             </div>
           </div>
         )}
-      </section>
-
-      {/* Vision & Devise */}
-      <section className="mt-6 rounded-2xl border border-border bg-card p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Notre devise
-        </h3>
-        <p className="mt-2 text-sm leading-relaxed text-foreground">
-          Living Fellowship rassemble les membres autour d'une vision commune :
-          développer la <strong>Personnalité</strong>, libérer la{" "}
-          <strong>Potentialité</strong> et marcher vers la{" "}
-          <strong>Prospérité</strong>.
-        </p>
       </section>
 
       {/* Contact & Support */}
