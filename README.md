@@ -1,6 +1,6 @@
 # Fellowship Connect
 
-En utilisant ce Logo,Creer LF Une App pour gerer tous les membres de l'entreprise *Living Fellowship*
+En utilisant ce Logo,Creer LF Une App pour gérer tous les membres de l'entreprise *Living Fellowship*
 
 1.Quand on ouvre l'Application on voit d'abord le logo qui se zoome en avant pendant 3s puis la photo des membres suit et se zoome en arrière pendant 5s en on tombe sur la *page Home*
 
