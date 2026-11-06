@@ -14,6 +14,9 @@
 
 ## Polissage des Paramètres
 
+- [ ] Corriger et vérifier l’ouverture des miniatures avec une session réelle.
+- [ ] Vérifier la chaîne Lovable → GitHub → Cloudflare sans modifier le déploiement existant.
+
 - [ ] Organiser les fonctions en trois miniatures par ligne et corriger les débordements.
 - [ ] Remplacer les fonctions par les catégories demandées, avec saisie personnalisée.
 - [ ] Afficher Notre Devise sous les paramètres et vérifier l’affichage mobile.
