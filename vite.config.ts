@@ -9,9 +9,9 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // Valeurs publiques du backend. Utilisées uniquement comme secours quand la
 // plateforme d'hébergement (ex. Cloudflare) ne fournit pas les variables au build.
 const FALLBACK_ENV: Record<string, string> = {
-  VITE_SUPABASE_URL: "https://sadkljntcdfdwebbyijx.supabase.co",
-  VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_61lUt9Y1NGm-gWR7uDG9zQ_zNkpJd9d",
-  VITE_SUPABASE_PROJECT_ID: "sadkljntcdfdwebbyijx",
+  VITE_SUPABASE_URL: "https://zwngnydeplxqbvndfzke.supabase.co",
+  VITE_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_ih7WfMeHSYlXudBGuDMOfQ_zmvYuMrL",
+  VITE_SUPABASE_PROJECT_ID: "zwngnydeplxqbvndfzke",
 };
 
 const define: Record<string, string> = {};
