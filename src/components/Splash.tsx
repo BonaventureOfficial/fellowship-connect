@@ -1,20 +1,38 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { lfLogo } from "@/lib/assets";
 
-const TOTAL_MS = 3000;
+const TOTAL_MS = 2500;
 
 /**
- * Splash d'ouverture : logo seul pendant 3s, puis révèle l'application.
- * Ne se joue qu'une fois par session (sessionStorage).
+ * Splash d'ouverture : logo pendant 2,5s max, puis révèle l'application.
+ * Protection contre les réinitialisations infinies du timer.
  */
 export function Splash({ onDone }: { onDone: () => void }) {
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+
   useEffect(() => {
-    const timer = setTimeout(onDone, TOTAL_MS);
-    return () => clearTimeout(timer);
-  }, [onDone]);
+    // Le minuteur est lancé une seule fois au montage
+    const timer = window.setTimeout(() => {
+      onDoneRef.current();
+    }, TOTAL_MS);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-background">
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Passer l'introduction"
+      onClick={() => onDoneRef.current()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
+          onDoneRef.current();
+        }
+      }}
+      className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center overflow-hidden bg-background select-none"
+    >
       <img
         src={lfLogo.url}
         alt="Living Fellowship"
