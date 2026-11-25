@@ -1308,7 +1308,7 @@ function HomeComponent() {
             title="Accueil Living Fellowship"
           >
             <img
-              src={lfLogo.url}
+              src={typeof lfLogo === "string" ? lfLogo : (lfLogo as any)?.url ?? String(lfLogo)}
               alt="Logo LF"
               className="h-10 w-10 select-none drop-shadow-[0_0_12px_rgba(255,107,0,0.45)]"
             />
